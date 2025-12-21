@@ -28,7 +28,7 @@ class ExampleInput:
 
 @dataclasses.dataclass
 class Example(ExampleInput):
-  y: float | Sequence[float]
+  y: str | float | Sequence[float]
 
 
 TensorT = TypeVar('TensorT')  # Low-level tensor type.

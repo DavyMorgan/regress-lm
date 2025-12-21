@@ -64,12 +64,18 @@ def preprocess_ghs_example(item, ghs_map):
             dosages.append('Unknown')
     
     # 3. Construct X
-    # Copy item to avoid mutation
-    x_obj = item.copy()
-    if 'GHS Codes' in x_obj:
-        del x_obj['GHS Codes']
+    # Reorder keys: SMILES, Dosage, then others
+    x_obj = {}
     
+    if 'SMILES' in item:
+        x_obj['SMILES'] = item['SMILES']
+        
     x_obj['Dosage'] = dosages
+    
+    # Add remaining keys
+    for k, v in item.items():
+        if k not in ['SMILES', 'GHS Codes']:
+            x_obj[k] = v
     
     x_str = json.dumps(x_obj)
     

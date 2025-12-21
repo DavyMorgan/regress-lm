@@ -9,6 +9,7 @@ import os
 import pathlib
 import sys
 from typing import List, Tuple
+from tqdm import tqdm
 
 import torch
 from torch.optim import lr_scheduler
@@ -36,7 +37,7 @@ def load_ghs_map(path: str):
     with open(path, 'r') as f:
         return json.load(f)
 
-def preprocess_ghs_example(item, ghs_map):
+def preprocess_ghs_example(item, ghs_map, add_other_features: bool = False):
     """
     Custom preprocessing for PubChem/GHS task.
     x: ALL features EXCLUDING 'GHS Codes' + 'Dosage'.
@@ -73,9 +74,10 @@ def preprocess_ghs_example(item, ghs_map):
     x_obj['Dosage'] = dosages
     
     # Add remaining keys
-    for k, v in item.items():
-        if k not in ['SMILES', 'GHS Codes']:
-            x_obj[k] = v
+    if add_other_features:
+        for k, v in item.items():
+            if k not in ['SMILES', 'GHS Codes', 'GHS Classification', 'Hazards Summary', 'Health Hazards']:
+                x_obj[k] = v
     
     x_str = json.dumps(x_obj)
     
@@ -100,7 +102,7 @@ def load_data(path: str, x_key: str = 'x', y_key: str = 'y', ghs_map = None) -> 
             data = json.load(f)
             if not isinstance(data, list):
                 raise ValueError("JSON file must contain a list of objects.")
-            for item in data:
+            for item in tqdm(data):
                 if ghs_map:
                     # GHS Special Logic
                     try:

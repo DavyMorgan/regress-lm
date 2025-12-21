@@ -47,13 +47,7 @@ def preprocess_ghs_example(item, ghs_map, add_other_features: bool = False):
     ghs_codes = item.get('GHS Codes', {})
     hazards = ghs_codes.get('Hazards', [])
     if not isinstance(hazards, list):
-         # If hazards is not a list, try to handle it or skip. 
-         # Based on inspection, it can be a dict sometimes? 
-         # Checked file: "Hazards": ["H302"...] or dict with Ref/Value?
-         # Step 161 showed "Hazards": ["H302"...] inside "GHS Codes" dict {"Hazards": [], "Precaution": []}.
-         # But in Line 306: "GHS Codes": { "Hazards": [...], ... }.
-         pass
-
+      raise ValueError(f"Expected 'Hazards' to be a list, but got {type(hazards)}")
     # 2. Dosage Lookup
     # Dosage is list of Categories for each Hazard code.
     dosages = []

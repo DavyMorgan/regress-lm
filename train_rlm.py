@@ -21,7 +21,18 @@ from regress_lm.pytorch import model as model_lib
 from regress_lm.pytorch import training
 from regress_lm.pytorch import data_utils
 
-def load_data(path: str) -> List[core.Example]:
+def get_nested(data, key_path):
+    """Accesses nested dictionary keys via dot notation."""
+    keys = key_path.split('.')
+    val = data
+    for k in keys:
+        if isinstance(val, dict) and k in val:
+            val = val[k]
+        else:
+            return None
+    return val
+
+def load_data(path: str, x_key: str = 'x', y_key: str = 'y') -> List[core.Example]:
     """Loads data from JSON, JSONL, or TSV file."""
     examples = []
     path = pathlib.Path(path)
@@ -37,14 +48,26 @@ def load_data(path: str) -> List[core.Example]:
             if not isinstance(data, list):
                 raise ValueError("JSON file must contain a list of objects.")
             for item in data:
-                examples.append(core.Example(x=str(item['x']), y=float(item['y'])))
+                x_val = get_nested(item, x_key)
+                y_val = get_nested(item, y_key)
+                if x_val is not None and y_val is not None:
+                    try:
+                        examples.append(core.Example(x=str(x_val), y=float(y_val)))
+                    except (ValueError, TypeError):
+                        pass # Skip invalid values
                 
     elif ext == '.jsonl':
         with open(path, 'r') as f:
             for line in f:
                 item = json.loads(line)
-                examples.append(core.Example(x=str(item['x']), y=float(item['y'])))
-                
+                x_val = get_nested(item, x_key)
+                y_val = get_nested(item, y_key)
+                if x_val is not None and y_val is not None:
+                    try:
+                        examples.append(core.Example(x=str(x_val), y=float(y_val)))
+                    except (ValueError, TypeError):
+                        pass
+
     elif ext == '.tsv':
         with open(path, 'r') as f:
             for line in f:
@@ -89,14 +112,16 @@ def main():
     parser.add_argument('--epochs', type=int, default=10, help='Number of epochs')
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--gpu', action='store_true', help='Use GPU if available')
+    parser.add_argument('--x_key', type=str, default='x', help='Key for input text (supports dot notation)')
+    parser.add_argument('--y_key', type=str, default='y', help='Key for target value (supports dot notation)')
 
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
     # 1. Load Data
-    train_examples = load_data(args.train_path)
-    val_examples = load_data(args.val_path) if args.val_path else []
+    train_examples = load_data(args.train_path, x_key=args.x_key, y_key=args.y_key)
+    val_examples = load_data(args.val_path, x_key=args.x_key, y_key=args.y_key) if args.val_path else []
 
     # 2. Setup Vocabulary
     vocab_prefix = os.path.join(args.output_dir, 'sentencepiece')

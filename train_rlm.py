@@ -81,10 +81,12 @@ def preprocess_ghs_example(item, ghs_map, add_other_features: bool = False):
     
     x_str = json.dumps(x_obj)
     
-    # 4. Construct Y as string (Output of decoder)
-    y_str = " ".join(hazards)
+    # 4. Construct Y
+    # Return list of hazard codes
+    # If using HazardCodeTokenizer, y should be List[str]
+    y_val = hazards 
     
-    return x_str, y_str
+    return x_str, y_val
 
 
 def load_data(path: str, x_key: str = 'x', y_key: str = 'y', ghs_map = None) -> List[core.Example]:
@@ -107,9 +109,7 @@ def load_data(path: str, x_key: str = 'x', y_key: str = 'y', ghs_map = None) -> 
                     # GHS Special Logic
                     try:
                         x_val, y_val = preprocess_ghs_example(item, ghs_map)
-                        # NOTE: y is string now. passing to float(y) would fail if we didn't update Example.
-                        # core.Example.y is type hinted float|Sequence[float].
-                        # We are passing str. This will work if we adjust the model to handle text targets.
+                        # y_val is List[str]
                         examples.append(core.Example(x=x_val, y=y_val)) 
                     except Exception as e:
                         # Skip malformed
@@ -152,32 +152,7 @@ def train_vocab(examples: List[core.Example], vocab_size: int, output_prefix: st
         
     return vocab
 
-class SPDecoderAdapter:
-    """Adapts a SentencePieceVocab to behave like a DecoderVocab for PyTorchModel."""
-    def __init__(self, sp_vocab: vocabs.SentencePieceVocab):
-        self.sp_vocab = sp_vocab
-        
-    @property
-    def num_tokens_per_obj(self) -> int:
-        # Treat each generated token as 1 object unit (for text generation)
-        return 1
-        
-    @property
-    def bos_pad_id(self) -> int:
-        return self.sp_vocab.pad_id
-        
-    def to_token_ids(self, obj, /) -> list[int]:
-        # obj is expected to be a string (the target text)
-        if isinstance(obj, list):
-            # If it's a list (e.g. list of strings?), join them or handle each?
-            # For this task y is a single string "H302 H314"
-            # But core.Example might have passed a list if we didn't join it.
-            # We implemented joining in preprocess_ghs_example.
-            pass
-        return self.sp_vocab.to_token_ids(obj)
 
-    def __len__(self) -> int:
-        return len(self.sp_vocab)
 
 def main():
     parser = argparse.ArgumentParser(description='Train RegressLM on custom data')
@@ -228,15 +203,17 @@ def main():
     # Decoder Vocab Selection
     max_num_objs = 1 
     if ghs_map:
-        # Text Generation Mode: Use Same SentencePiece Vocab for Decoder (via adapter)
-        print("Using SentencePiece vocabulary for Decoder (Text Generation Mode)")
-        decoder_vocab = SPDecoderAdapter(encoder_vocab)
-        max_num_objs = args.max_decode_len # Set generated length
+        # GHS Mode: Use HazardCodeTokenizer
+        print("Using HazardCodeTokenizer for Decoder (GHS Mode)")
+        decoder_vocab = vocabs.DecoderVocab(tokenizers.HazardCodeTokenizer())
+        # Since we predict a list of objects (hazards), and each hazard is 1 object (1 token),
+        # max_num_objs determines how many hazards we can predict.
+        max_num_objs = args.max_decode_len 
     else:
         # Standard Regression Mode: Use P10 Tokenizer
         print("Using P10 Tokenizer for Decoder (Regression Mode)")
         decoder_vocab = vocabs.DecoderVocab(tokenizers.P10Tokenizer())
-        max_num_objs = 1 # Regression typically outputs 1 value (or small fixed seq)
+        max_num_objs = 1
 
     # 3. Model Configuration
     config = model_lib.PyTorchModelConfig(

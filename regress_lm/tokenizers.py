@@ -448,3 +448,46 @@ class AppendPadTokenizer(DecoderTokenizer[ObjectT]):
     if not tokens or tokens[-1] != self.pad_token:
       raise ValueError(f'Expected a "{self.pad_token}" token at the end.')
     return self.tokenizer.from_tokens(tokens[:-1])
+
+
+class HazardCodeTokenizer(DecoderTokenizer[str]):
+  """Tokenizer for GHS Hazard Codes.
+  
+  Treats each hazard code as a single token.
+  """
+  
+  ALLOWED_CODES = [
+      'H200', 'H201', 'H202', 'H203', 'H204', 'H205', 'H220', 'H221', 'H223',
+      'H224', 'H225', 'H226', 'H227', 'H228', 'H229', 'H230', 'H231', 'H232',
+      'H240', 'H241', 'H242', 'H250', 'H251', 'H252', 'H260', 'H261', 'H270',
+      'H271', 'H272', 'H280', 'H281', 'H290', 'H300', 'H301', 'H302', 'H303',
+      'H304', 'H305', 'H310', 'H311', 'H312', 'H313', 'H314', 'H315', 'H316',
+      'H317', 'H318', 'H319', 'H320', 'H330', 'H331', 'H332', 'H333', 'H334',
+      'H335', 'H336', 'H340', 'H341', 'H350', 'H351', 'H360', 'H361', 'H362',
+      'H370', 'H371', 'H372', 'H373', 'H400', 'H401', 'H402', 'H410', 'H411',
+      'H412', 'H413', 'H420'
+  ]
+
+  def __init__(self):
+    self.allowed_codes = sorted(list(set(self.ALLOWED_CODES)))
+    self._token_set = OrderedSet([_to_token(c) for c in self.allowed_codes])
+    
+  @property
+  def num_tokens_per_obj(self) -> int:
+    return 1
+
+  def all_tokens(self) -> OrderedSet[str]:
+    return self._token_set
+    
+  def possible_next_tokens(self, prev_tokens: list[str]) -> OrderedSet[str]:
+    return self._token_set
+
+  def to_tokens(self, obj: str, /) -> list[str]:
+    if obj not in self.allowed_codes:
+      # If we encounter an unknown code, passing it through might be risky if vocab expects only known ones.
+      # For now, raise error or map to UNK if we had one.
+      raise ValueError(f"Unknown hazard code: {obj}")
+    return [_to_token(obj)]
+
+  def from_tokens(self, tokens: list[str], /) -> str:
+    return _from_token(tokens[0])

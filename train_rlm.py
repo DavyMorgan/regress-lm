@@ -7,8 +7,8 @@ import argparse
 import json
 import os
 import pathlib
-import sys
-from typing import List, Tuple
+import random
+from typing import List
 from tqdm import tqdm
 
 import torch
@@ -22,6 +22,7 @@ from regress_lm.pytorch import model as model_lib
 from regress_lm.pytorch import training
 from regress_lm.pytorch import data_utils
 
+
 def get_nested(data, key_path):
     """Accesses nested dictionary keys via dot notation."""
     keys = key_path.split('.')
@@ -33,9 +34,11 @@ def get_nested(data, key_path):
             return None
     return val
 
+
 def load_ghs_map(path: str):
     with open(path, 'r') as f:
         return json.load(f)
+
 
 def preprocess_ghs_example(item, ghs_map, add_other_features: bool = False):
     """
@@ -123,6 +126,7 @@ def load_data(path: str, x_key: str = 'x', y_key: str = 'y', ghs_map = None) -> 
     print(f"Loaded {len(examples)} examples from {path}")
     return examples
 
+
 def train_vocab(examples: List[core.Example], vocab_size: int, output_prefix: str, include_targets: bool = False) -> vocabs.SentencePieceVocab:
     """Trains a SentencePiece vocabulary from example inputs (and optionally targets)."""
     # Write inputs to a temporary file
@@ -147,11 +151,9 @@ def train_vocab(examples: List[core.Example], vocab_size: int, output_prefix: st
     return vocab
 
 
-
 def main():
     parser = argparse.ArgumentParser(description='Train RegressLM on custom data')
-    parser.add_argument('--train_path', type=str, required=True, help='Path to training data')
-    parser.add_argument('--val_path', type=str, default=None, help='Path to validation data')
+    parser.add_argument('--data_path', type=str, required=True, help='Path to data')
     parser.add_argument('--output_dir', type=str, default='output', help='Output directory')
     parser.add_argument('--vocab_size', type=int, default=8192, help='Vocabulary size')
     parser.add_argument('--max_input_len', type=int, default=512, help='Max input length')
@@ -162,6 +164,7 @@ def main():
     parser.add_argument('--gpu', action='store_true', help='Use GPU if available')
     parser.add_argument('--x_key', type=str, default='x', help='Key for input text (supports dot notation)')
     parser.add_argument('--y_key', type=str, default='y', help='Key for target value (supports dot notation)')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for data splitting')
     
     # GHS specific args
     parser.add_argument('--ghs_path', type=str, default=None, help='Path to ghs_hazard_statements.json for custom preprocessing')
@@ -177,10 +180,22 @@ def main():
         ghs_map = load_ghs_map(args.ghs_path)
 
     # 1. Load Data
-    train_examples = load_data(args.train_path, x_key=args.x_key, y_key=args.y_key, ghs_map=ghs_map)
-    val_examples = load_data(args.val_path, x_key=args.x_key, y_key=args.y_key, ghs_map=ghs_map) if args.val_path else []
+    print(f"Loading data from {args.data_path}")
+    all_examples = load_data(args.data_path, x_key=args.x_key, y_key=args.y_key, ghs_map=ghs_map)
+    
+    # 2. Split Data (80/20)
+    print(f"Splitting data with seed {args.seed}...")
+    rng = random.Random(args.seed)
+    rng.shuffle(all_examples)
+    
+    split_idx = int(len(all_examples) * 0.8)
+    train_examples = all_examples[:split_idx]
+    val_examples = all_examples[split_idx:]
+    
+    print(f"Train size: {len(train_examples)}")
+    print(f"Val size: {len(val_examples)}")
 
-    # 2. Setup Vocabulary
+    # 3. Setup Vocabulary
     vocab_prefix = os.path.join(args.output_dir, 'sentencepiece')
     vocab_model_path = vocab_prefix + '.model'
     
@@ -288,6 +303,7 @@ def main():
         checkpoint_path = os.path.join(args.output_dir, f"checkpoint_epoch_{epoch+1}.pt")
         trainer.save_checkpoint(checkpoint_path)
         print(f"  Saved checkpoint to {checkpoint_path}")
+
 
 if __name__ == '__main__':
     main()

@@ -149,7 +149,6 @@ def main():
     # 5. Training Loop
     print("Starting training...")
     steps_per_epoch = len(train_examples) // args.batch_size
-    total_steps = steps_per_epoch * args.epochs
     
     # Simply using the cycle_dataloader/run_train_step pattern manually or iterating
     # Since the Trainer doesn't hold the loop itself, we write it here.

@@ -1,6 +1,6 @@
 __pycache__
 test_output
-pubchem_ghs_test
+*_test/
 .venv
 regress_lm.egg-info
 *.json

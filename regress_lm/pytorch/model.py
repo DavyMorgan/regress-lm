@@ -39,7 +39,7 @@ class PyTorchModelConfig:
 
   # Vocabularies
   encoder_vocab: vocabs.EncoderVocab[str]
-  decoder_vocab: vocabs.DecoderVocab[float]
+  decoder_vocab: vocabs.DecoderVocab[float | str]
 
   # Core Dimensions
   max_input_len: int

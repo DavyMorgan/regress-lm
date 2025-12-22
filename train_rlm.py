@@ -68,6 +68,8 @@ def preprocess_ghs_example(item, ghs_map, add_other_features: bool = False):
     # Return list of hazard codes
     # If using HazardCodeTokenizer, y should be List[str]
     y_val = hazards 
+    if len(hazards) == 0:
+        y_val = ['NULL']
     
     return x_str, y_val
 
@@ -232,7 +234,7 @@ def main():
     # Decoder Vocab Selection
     # GHS Mode: Use HazardCodeTokenizer
     print("Using HazardCodeTokenizer for Decoder (GHS Mode)")
-    decoder_vocab = vocabs.DecoderVocab(tokenizers.HazardCodeTokenizer())
+    decoder_vocab = vocabs.DecoderVocab(tokenizers.HazardCodeTokenizer(all_hazard_codes=list(ghs_map.keys())+['NULL']))
     # Since we predict a list of objects (hazards), and each hazard is 1 object (1 token),
     # max_num_objs determines how many hazards we can predict.
     max_num_objs = args.max_decode_len 

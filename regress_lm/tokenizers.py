@@ -455,21 +455,8 @@ class HazardCodeTokenizer(DecoderTokenizer[str]):
   
   Treats each hazard code as a single token.
   """
-  
-  ALLOWED_CODES = [
-      'H200', 'H201', 'H202', 'H203', 'H204', 'H205', 'H220', 'H221', 'H223',
-      'H224', 'H225', 'H226', 'H227', 'H228', 'H229', 'H230', 'H231', 'H232',
-      'H240', 'H241', 'H242', 'H250', 'H251', 'H252', 'H260', 'H261', 'H270',
-      'H271', 'H272', 'H280', 'H281', 'H290', 'H300', 'H301', 'H302', 'H303',
-      'H304', 'H305', 'H310', 'H311', 'H312', 'H313', 'H314', 'H315', 'H316',
-      'H317', 'H318', 'H319', 'H320', 'H330', 'H331', 'H332', 'H333', 'H334',
-      'H335', 'H336', 'H340', 'H341', 'H350', 'H351', 'H360', 'H361', 'H362',
-      'H370', 'H371', 'H372', 'H373', 'H400', 'H401', 'H402', 'H410', 'H411',
-      'H412', 'H413', 'H420'
-  ]
-
-  def __init__(self):
-    self.allowed_codes = sorted(list(set(self.ALLOWED_CODES)))
+  def __init__(self, all_hazard_codes: list[str]):
+    self.allowed_codes = sorted(list(set(all_hazard_codes)))
     self._token_set = OrderedSet([_to_token(c) for c in self.allowed_codes])
     
   @property

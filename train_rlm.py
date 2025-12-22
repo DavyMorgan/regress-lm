@@ -23,6 +23,8 @@ from regress_lm.pytorch import model as model_lib
 from regress_lm.pytorch import training
 from regress_lm.pytorch import data_utils
 
+from ordered_set import OrderedSet
+
 
 def preprocess_ghs_example(item, ghs_map, add_other_features: bool = False):
     """
@@ -67,11 +69,13 @@ def preprocess_ghs_example(item, ghs_map, add_other_features: bool = False):
     # 4. Construct Y
     # Return list of hazard codes
     # If using HazardCodeTokenizer, y should be List[str]
-    y_val = hazards 
     if len(hazards) == 0:
-        y_val = ['NULL']
+        hazards = ['NULL']
+    hazards = sorted(hazards)
+    hazards.append('STOP')
+    y_str = [' '.join(hazards)]
     
-    return x_str, y_val
+    return x_str, y_str
 
 
 def load_data(path: str, ghs_map: dict[str, str]) -> List[core.Example]:
@@ -118,11 +122,11 @@ def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], 
         shuffle=False
     )
     
-    def compute_instance_metrics(args: tuple[core.Example, np.ndarray]):
-        ex, pred_obj_row = args
-        pred_set = {p for p in pred_obj_row if isinstance(p, str) and p.startswith('H')}
-        gold_set = set(ex.y)
-        
+    def compute_instance_metrics(args: tuple[core.Example, str]):
+        ex, pred = args
+        pred_set = OrderedSet([c for c in pred.split() if c != 'STOP'])
+        gold_set = OrderedSet(ex.y[0].split()[:-1])
+
         tp = len(gold_set.intersection(pred_set))
         prec = tp / len(pred_set) if len(pred_set) > 0 else 0.0
         rec = tp / len(gold_set) if len(gold_set) > 0 else 0.0
@@ -139,7 +143,7 @@ def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], 
             batch_examples = examples[start_idx : start_idx + current_batch_size]
 
             # output_objs[:, 0] gives the first sample for each item in batch
-            batch_results = list(map(compute_instance_metrics, zip(batch_examples, output_objs[:, 0])))
+            batch_results = list(map(compute_instance_metrics, zip(batch_examples, output_objs[:, 0, 0])))
             
             batch_prec, batch_rec = zip(*batch_results)
             total_precision += sum(batch_prec)
@@ -185,7 +189,7 @@ def main():
     parser.add_argument('--output_dir', type=str, default='output', help='Output directory')
     parser.add_argument('--vocab_size', type=int, default=8192, help='Vocabulary size')
     parser.add_argument('--max_input_len', type=int, default=512, help='Max input length')
-    parser.add_argument('--max_decode_len', type=int, default=75, help='Max decode length (for text gen)')
+    parser.add_argument('--max_num_hazard_codes', type=int, default=30, help='Max number of hazard codes per example')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--epochs', type=int, default=10, help='Number of epochs')
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
@@ -234,17 +238,19 @@ def main():
     # Decoder Vocab Selection
     # GHS Mode: Use HazardCodeTokenizer
     print("Using HazardCodeTokenizer for Decoder (GHS Mode)")
-    decoder_vocab = vocabs.DecoderVocab(tokenizers.HazardCodeTokenizer(all_hazard_codes=list(ghs_map.keys())+['NULL']))
-    # Since we predict a list of objects (hazards), and each hazard is 1 object (1 token),
-    # max_num_objs determines how many hazards we can predict.
-    max_num_objs = args.max_decode_len 
+    decoder_vocab = vocabs.DecoderVocab(
+        tokenizers.HazardCodeTokenizer(
+            all_hazard_codes=list(ghs_map.keys())+['NULL', 'STOP'],
+            max_num_hazard_codes=args.max_num_hazard_codes,
+        )
+    )
 
     # 3. Model Configuration
     config = model_lib.PyTorchModelConfig(
         encoder_vocab=encoder_vocab,
         decoder_vocab=decoder_vocab,
         max_input_len=args.max_input_len,
-        max_num_objs=max_num_objs, # Important for Text Gen
+        max_num_objs=1,
         architecture_kwargs={
             'd_model': 512, 
             'num_encoder_layers': 6, 

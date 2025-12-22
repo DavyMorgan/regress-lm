@@ -455,26 +455,38 @@ class HazardCodeTokenizer(DecoderTokenizer[str]):
   
   Treats each hazard code as a single token.
   """
-  def __init__(self, all_hazard_codes: list[str]):
+  def __init__(self, all_hazard_codes: list[str], max_num_hazard_codes: int):
     self.allowed_codes = sorted(list(set(all_hazard_codes)))
     self._token_set = OrderedSet([_to_token(c) for c in self.allowed_codes])
+    self.max_num_hazard_codes = max_num_hazard_codes
     
   @property
   def num_tokens_per_obj(self) -> int:
-    return 1
+    return self.max_num_hazard_codes
 
   def all_tokens(self) -> OrderedSet[str]:
     return self._token_set
     
   def possible_next_tokens(self, prev_tokens: list[str]) -> OrderedSet[str]:
-    return self._token_set
+    num_hazard_codes = len(prev_tokens)
+    if num_hazard_codes < 0 or num_hazard_codes >= self.num_tokens_per_obj:
+      raise ValueError(f'Index {num_hazard_codes} out of bounds.')
+
+    if num_hazard_codes == 0:
+      return self._token_set - OrderedSet([_to_token('STOP')])
+
+    last_code = _from_token(prev_tokens[-1])
+    if last_code == 'STOP' or last_code == 'NULL':
+      return OrderedSet([_to_token('STOP')])
+    else:
+      tokens = self._token_set - OrderedSet(prev_tokens + [_to_token('NULL')])
+      return tokens
 
   def to_tokens(self, obj: str, /) -> list[str]:
-    if obj not in self.allowed_codes:
-      # If we encounter an unknown code, passing it through might be risky if vocab expects only known ones.
-      # For now, raise error or map to UNK if we had one.
-      raise ValueError(f"Unknown hazard code: {obj}")
-    return [_to_token(obj)]
+    obj = obj.split()
+    if len(obj) > self.num_tokens_per_obj:
+      raise ValueError(f'Object {obj} has more than {self.max_num_hazard_codes} hazard codes.')
+    return [_to_token(o) for o in obj]
 
   def from_tokens(self, tokens: list[str], /) -> str:
-    return _from_token(tokens[0])
+    return ' '.join(_from_token(t) for t in tokens)

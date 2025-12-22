@@ -88,20 +88,16 @@ def load_data(path: str, ghs_map: dict[str, str]) -> List[core.Example]:
             if not isinstance(data, list):
                 raise ValueError("JSON file must contain a list of objects.")
             for item in tqdm(data):
-                if ghs_map:
-                    try:
-                        x_val, y_val = preprocess_ghs_example(item, ghs_map)
-                        examples.append(core.Example(x=x_val, y=y_val)) 
-                    except Exception as e:
-                        pass
-                else:
-                    raise ValueError("Missing ghs_map!")
+                try:
+                    x_val, y_val = preprocess_ghs_example(item, ghs_map)
+                    examples.append(core.Example(x=x_val, y=y_val)) 
+                except Exception as e:
+                    pass
     else:
         raise ValueError(f"Unsupported file extension: {ext}. Use .json")
         
     print(f"Loaded {len(examples)} examples from {path}")
     return examples
-
 
 
 def evaluate_model(model, examples, batch_size=16):
@@ -122,13 +118,9 @@ def evaluate_model(model, examples, batch_size=16):
     
     def compute_instance_metrics(args: tuple[core.Example, np.ndarray]):
         ex, pred_obj_row = args
-        # clean pred_list
         pred_set = {p for p in pred_obj_row if isinstance(p, str) and p.startswith('H')}
-        
-        # Gold set
         gold_set = set(ex.y)
         
-        # Metrics
         tp = len(gold_set.intersection(pred_set))
         prec = tp / len(pred_set) if len(pred_set) > 0 else 0.0
         rec = tp / len(gold_set) if len(gold_set) > 0 else 0.0
@@ -136,24 +128,21 @@ def evaluate_model(model, examples, batch_size=16):
              
     with torch.no_grad():
         for i, batch in enumerate(tqdm(dl)):
-             # batch is dict.
-             # decode returns (ids, output_objs)
-             # output_objs: (B, num_samples, max_num_objs)
-             _, output_objs = model.decode(batch, num_samples=1)
-             
-             start_idx = i * batch_size
-             # Note: batch size in last batch might be smaller
-             current_batch_size = output_objs.shape[0]
-             batch_examples = examples[start_idx : start_idx + current_batch_size]
+            # batch is dict. decode returns (ids, output_objs)
+            # output_objs: (B, num_samples, max_num_objs)
+            _, output_objs = model.decode(batch, num_samples=1)
+            
+            start_idx = i * batch_size
+            current_batch_size = output_objs.shape[0]
+            batch_examples = examples[start_idx : start_idx + current_batch_size]
 
-             # Use map to process batch
-             # output_objs[:, 0] gives the first sample for each item in batch
-             batch_results = list(map(compute_instance_metrics, zip(batch_examples, output_objs[:, 0])))
-             
-             batch_prec, batch_rec = zip(*batch_results)
-             total_precision += sum(batch_prec)
-             total_recall += sum(batch_rec)
-             count += current_batch_size
+            # output_objs[:, 0] gives the first sample for each item in batch
+            batch_results = list(map(compute_instance_metrics, zip(batch_examples, output_objs[:, 0])))
+            
+            batch_prec, batch_rec = zip(*batch_results)
+            total_precision += sum(batch_prec)
+            total_recall += sum(batch_rec)
+            count += current_batch_size
                  
     avg_prec = total_precision / count if count > 0 else 0.0
     avg_rec = total_recall / count if count > 0 else 0.0
@@ -205,12 +194,9 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Load GHS map if provided
-    ghs_map = None
-    if args.ghs_path:
-        print(f"Loading GHS map from {args.ghs_path}")
-        with open(args.ghs_path, 'r') as f:
-            ghs_map = json.load(f)
+    print(f"Loading GHS map from {args.ghs_path}")
+    with open(args.ghs_path, 'r') as f:
+        ghs_map = json.load(f)
 
     # 1. Load Data
     print(f"Loading data from {args.data_path}")
@@ -224,7 +210,6 @@ def main():
     split_idx = int(len(all_examples) * 0.8)
     train_examples = all_examples[:split_idx]
     val_examples = all_examples[split_idx:]
-    
     print(f"Train size: {len(train_examples)}")
     print(f"Val size: {len(val_examples)}")
 
@@ -285,10 +270,6 @@ def main():
     # 5. Training Loop
     print("Starting training...")
     steps_per_epoch = len(train_examples) // args.batch_size
-    
-    # Simply using the cycle_dataloader/run_train_step pattern manually or iterating
-    # Since the Trainer doesn't hold the loop itself, we write it here.
-    
     train_dl = trainer.train_dl
     
     for epoch in range(args.epochs):
@@ -297,16 +278,6 @@ def main():
         # Train
         epoch_losses = []
         for i, batch in enumerate(train_dl):
-            # Move batch to device is handled inside model.compute_losses_and_metrics 
-            # via to_device, but Trainer usually handles it? 
-            # Looking at training.py, Trainer.run_train_step calls wrapper.forward(batch)
-            # and wrapper calls model.compute_losses_and_metrics(batch).
-            # model.compute_losses_and_metrics calls self.to_device(examples['...'])
-            # So we just pass the batch from dataloader.
-            
-            # Note: The trainer implementation in training.py has a slightly complex run_train_step 
-            # which updates weights. 
-            
             metrics = trainer.run_train_step(batch)
             loss = metrics.get('train_loss_mean', 0.0)
             epoch_losses.append(loss)

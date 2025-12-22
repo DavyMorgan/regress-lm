@@ -14,6 +14,7 @@ def main():
     
     num_items = 0
     num_hazards = 0
+    max_hazards = 0
     try:
         with open(args.path, 'rb') as f:
             # Assumes the file is a list of objects. 'item' parses each object in the array.
@@ -29,6 +30,7 @@ def main():
                         if isinstance(h, str):
                             unique_hazards.add(h)
                 num_items += 1
+                max_hazards = max(max_hazards, len(hazards))
     except FileNotFoundError:
         print(f"Error: File {args.path} not found.")
         sys.exit(1)
@@ -41,6 +43,7 @@ def main():
     print(f"Found {num_items} items in total.")
     sorted_hazards = sorted(list(unique_hazards))
     print(sorted_hazards)
+    print(f"Max hazards per item: {max_hazards}")
     
 if __name__ == '__main__':
     main()

@@ -100,7 +100,7 @@ def load_data(path: str, ghs_map: dict[str, str]) -> List[core.Example]:
     return examples
 
 
-def evaluate_model(model, examples, batch_size=16):
+def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=16):
     model.eval()
     print("Evaluating...")
     
@@ -192,6 +192,11 @@ def main():
 
     args = parser.parse_args()
 
+    # seed
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    
     os.makedirs(args.output_dir, exist_ok=True)
     
     print(f"Loading GHS map from {args.ghs_path}")

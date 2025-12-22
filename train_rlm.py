@@ -11,6 +11,7 @@ import random
 from typing import List
 from tqdm import tqdm
 
+import numpy as np
 import torch
 from torch.optim import lr_scheduler
 from torch import optim
@@ -119,6 +120,20 @@ def evaluate_model(model, examples, batch_size=16):
         shuffle=False
     )
     
+    def compute_instance_metrics(args: tuple[core.Example, np.ndarray]):
+        ex, pred_obj_row = args
+        # clean pred_list
+        pred_set = {p for p in pred_obj_row if isinstance(p, str) and p.startswith('H')}
+        
+        # Gold set
+        gold_set = set(ex.y)
+        
+        # Metrics
+        tp = len(gold_set.intersection(pred_set))
+        prec = tp / len(pred_set) if len(pred_set) > 0 else 0.0
+        rec = tp / len(gold_set) if len(gold_set) > 0 else 0.0
+        return prec, rec
+             
     with torch.no_grad():
         for i, batch in enumerate(tqdm(dl)):
              # batch is dict.
@@ -130,29 +145,15 @@ def evaluate_model(model, examples, batch_size=16):
              # Note: batch size in last batch might be smaller
              current_batch_size = output_objs.shape[0]
              batch_examples = examples[start_idx : start_idx + current_batch_size]
+
+             # Use map to process batch
+             # output_objs[:, 0] gives the first sample for each item in batch
+             batch_results = list(map(compute_instance_metrics, zip(batch_examples, output_objs[:, 0])))
              
-             for j, ex in enumerate(batch_examples):
-                 # output_objs is numpy array of objects
-                 pred_list = output_objs[j, 0] # shape (max_num_objs,)
-                 
-                 # clean pred_list
-                 pred_set = set()
-                 for p in pred_list:
-                     # Check if p is valid string and hazard code
-                     if isinstance(p, str) and p.startswith('H'):
-                         pred_set.add(p)
-                 
-                 # Gold set
-                 gold_set = set(ex.y)
-                 
-                 # Metrics
-                 tp = len(gold_set.intersection(pred_set))
-                 prec = tp / len(pred_set) if len(pred_set) > 0 else 0.0
-                 rec = tp / len(gold_set) if len(gold_set) > 0 else 0.0
-                 
-                 total_precision += prec
-                 total_recall += rec
-                 count += 1
+             batch_prec, batch_rec = zip(*batch_results)
+             total_precision += sum(batch_prec)
+             total_recall += sum(batch_rec)
+             count += current_batch_size
                  
     avg_prec = total_precision / count if count > 0 else 0.0
     avg_rec = total_recall / count if count > 0 else 0.0

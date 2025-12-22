@@ -102,6 +102,66 @@ def load_data(path: str, ghs_map: dict[str, str]) -> List[core.Example]:
     return examples
 
 
+
+def evaluate_model(model, examples, batch_size=16):
+    model.eval()
+    print("Evaluating...")
+    
+    total_precision = 0.0
+    total_recall = 0.0
+    count = 0
+    
+    ds = data_utils.ExampleDataset(examples)
+    dl = torch.utils.data.DataLoader(
+        ds, 
+        batch_size=batch_size, 
+        collate_fn=model.converter.convert_examples,
+        shuffle=False
+    )
+    
+    with torch.no_grad():
+        for i, batch in enumerate(tqdm(dl)):
+             # batch is dict.
+             # decode returns (ids, output_objs)
+             # output_objs: (B, num_samples, max_num_objs)
+             _, output_objs = model.decode(batch, num_samples=1)
+             
+             start_idx = i * batch_size
+             # Note: batch size in last batch might be smaller
+             current_batch_size = output_objs.shape[0]
+             batch_examples = examples[start_idx : start_idx + current_batch_size]
+             
+             for j, ex in enumerate(batch_examples):
+                 # output_objs is numpy array of objects
+                 pred_list = output_objs[j, 0] # shape (max_num_objs,)
+                 
+                 # clean pred_list
+                 pred_set = set()
+                 for p in pred_list:
+                     # Check if p is valid string and hazard code
+                     if isinstance(p, str) and p.startswith('H'):
+                         pred_set.add(p)
+                 
+                 # Gold set
+                 gold_set = set(ex.y)
+                 
+                 # Metrics
+                 tp = len(gold_set.intersection(pred_set))
+                 prec = tp / len(pred_set) if len(pred_set) > 0 else 0.0
+                 rec = tp / len(gold_set) if len(gold_set) > 0 else 0.0
+                 
+                 total_precision += prec
+                 total_recall += rec
+                 count += 1
+                 
+    avg_prec = total_precision / count if count > 0 else 0.0
+    avg_rec = total_recall / count if count > 0 else 0.0
+    
+    print(f"Evaluation Results on {count} instances:")
+    print(f"  Average Precision: {avg_prec:.4f}")
+    print(f"  Average Recall:    {avg_rec:.4f}")
+
+
 def train_vocab(examples: List[core.Example], vocab_size: int, output_prefix: str, include_targets: bool = False) -> vocabs.SentencePieceVocab:
     """Trains a SentencePiece vocabulary from inputs (and optionally targets)."""
     # Write inputs to a temporary file
@@ -210,7 +270,7 @@ def main():
     scheduler_factory = lambda opt: lr_scheduler.StepLR(opt, step_size=1, gamma=0.95) # Simple decay
 
     train_ds = data_utils.ExampleDataset(train_examples)
-    val_ds = data_utils.ExampleDataset(val_examples) if val_examples else data_utils.ExampleDataset(train_examples[:10]) # Use subset of train if no val
+    val_ds = data_utils.ExampleDataset(val_examples)
 
     trainer = training.Trainer(
         model=model,
@@ -257,14 +317,17 @@ def main():
         print(f"  Avg Train Loss: {avg_train_loss:.4f}")
         
         # Validation
-        if val_examples:
-            val_metrics = trainer.run_validation_epoch()
-            print(f"  Val Loss: {val_metrics.get('validation_loss', -1.0):.4f}")
+        val_metrics = trainer.run_validation_epoch()
+        print(f"  Val Loss: {val_metrics.get('validation_loss', -1.0):.4f}")
             
         # Save Checkpoint
         checkpoint_path = os.path.join(args.output_dir, f"checkpoint_epoch_{epoch+1}.pt")
         trainer.save_checkpoint(checkpoint_path)
         print(f"  Saved checkpoint to {checkpoint_path}")
+
+    # 6. Evaluation
+    print("\nRunning final evaluation on validation set...")
+    evaluate_model(model, val_examples, batch_size=args.batch_size)
 
 
 if __name__ == '__main__':

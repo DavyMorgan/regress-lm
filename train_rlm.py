@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from torch.optim import lr_scheduler
 from torch import optim
+from torch.utils.tensorboard import SummaryWriter
 
 from regress_lm import core
 from regress_lm import vocabs
@@ -106,7 +107,7 @@ def load_data(path: str, ghs_map: dict[str, str]) -> List[core.Example]:
     return examples
 
 
-def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=16):
+def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=16, writer=None, step: int = 0):
     model.eval()
     print("Evaluating...")
     
@@ -157,6 +158,10 @@ def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], 
     print(f"  Average Precision: {avg_prec:.4f}")
     print(f"  Average Recall:    {avg_rec:.4f}")
 
+    if writer:
+        writer.add_scalar('Eval/Precision', avg_prec, step)
+        writer.add_scalar('Eval/Recall', avg_rec, step)
+
 
 def train_vocab(examples: List[core.Example], vocab_size: int, output_prefix: str, include_targets: bool = False) -> vocabs.SentencePieceVocab:
     """Trains a SentencePiece vocabulary from inputs (and optionally targets)."""
@@ -197,13 +202,16 @@ def main():
     parser.add_argument('--seed', type=int, default=42, help='Random seed for data splitting')
 
     args = parser.parse_args()
-
+    
     # seed
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     
     os.makedirs(args.output_dir, exist_ok=True)
+    
+    # Initialize TensorBoard Writer
+    writer = SummaryWriter(log_dir=args.output_dir)
     
     print(f"Loading GHS map from {args.ghs_path}")
     with open(args.ghs_path, 'r') as f:
@@ -285,25 +293,36 @@ def main():
     steps_per_epoch = len(train_examples) // args.batch_size
     train_dl = trainer.train_dl
     
+    global_step = 0
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
         
         # Train
         epoch_losses = []
         for i, batch in enumerate(train_dl):
+            global_step += 1
             metrics = trainer.run_train_step(batch)
             loss = metrics.get('train_loss_mean', 0.0)
+            perplexity = metrics.get('train_perplexity', 0.0)
             epoch_losses.append(loss)
             
             if i % 10 == 0:
                 print(f"  Step {i}/{steps_per_epoch} - Loss: {loss:.4f}")
+                writer.add_scalar('Train/Loss', loss, global_step)
+                writer.add_scalar('Train/Perplexity', perplexity, global_step)
                 
         avg_train_loss = sum(epoch_losses) / len(epoch_losses) if epoch_losses else 0.0
         print(f"  Avg Train Loss: {avg_train_loss:.4f}")
+        writer.add_scalar('Train/Avg_Loss', avg_train_loss, global_step)
         
         # Validation
         val_metrics = trainer.run_validation_epoch()
-        print(f"  Val Loss: {val_metrics.get('validation_loss', -1.0):.4f}")
+        val_loss = val_metrics.get('validation_loss', -1.0)
+        val_ppl = val_metrics.get('validation_perplexity', -1.0)
+        print(f"  Val Loss: {val_loss:.4f}")
+        
+        writer.add_scalar('Val/Loss', val_loss, global_step)
+        writer.add_scalar('Val/Perplexity', val_ppl, global_step)
             
         # Save Checkpoint
         checkpoint_path = os.path.join(args.output_dir, f"checkpoint_epoch_{epoch+1}.pt")
@@ -312,8 +331,9 @@ def main():
 
     # 6. Evaluation
     print("\nRunning final evaluation on validation set...")
-    evaluate_model(model, val_examples, batch_size=args.batch_size)
-
-
+    evaluate_model(model, val_examples, batch_size=args.batch_size, writer=writer, step=global_step)
+    
+    writer.close()
+    
 if __name__ == '__main__':
     main()

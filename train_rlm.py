@@ -108,7 +108,7 @@ def load_data(path: str, ghs_map: dict[str, str]) -> List[core.Example]:
     return examples
 
 
-def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=16, writer=None, step: int = 0):
+def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=16, temperature=0.0, writer=None, step: int = 0):
     model.eval()
     logging.info(f"Evaluating at step {step}...")
     
@@ -138,7 +138,7 @@ def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], 
         for i, batch in enumerate(tqdm(dl)):
             # batch is dict. decode returns (ids, output_objs)
             # output_objs: (B, num_samples, max_num_objs)
-            _, output_objs = model.decode(batch, num_samples=1)
+            _, output_objs = model.decode(batch, num_samples=1, temperature=temperature)
             
             start_idx = i * batch_size
             current_batch_size = output_objs.shape[0]
@@ -209,6 +209,7 @@ def main():
     parser.add_argument('--d_model', type=int, default=512, help='Model dimension')
     parser.add_argument('--num_encoder_layers', type=int, default=6, help='Number of encoder layers')
     parser.add_argument('--num_decoder_layers', type=int, default=6, help='Number of decoder layers')
+    parser.add_argument('--temperature', type=float, default=0.0, help='Temperature for decoding')
 
     args = parser.parse_args()
     
@@ -305,8 +306,9 @@ def main():
     global_step = 0
 
     logging.info("Running initial evaluation on validation set...")
-    _, _, f1 = evaluate_model(model, val_examples, batch_size=args.batch_size, writer=writer, step=global_step)
+    _, _, f1 = evaluate_model(model, val_examples, batch_size=args.batch_size, temperature=args.temperature, writer=writer, step=global_step)
     best_f1 = f1
+    best_step = global_step
 
     for epoch in tqdm(range(args.epochs), desc="Epoch", leave=True, position=0):
         logging.info(f"Epoch {epoch+1}/{args.epochs}")
@@ -338,18 +340,21 @@ def main():
         writer.add_scalar('Val/Loss', val_loss, global_step)
         writer.add_scalar('Val/Perplexity', val_ppl, global_step)
 
-        _, _, f1 = evaluate_model(model, val_examples, batch_size=args.batch_size, writer=writer, step=global_step)
+        _, _, f1 = evaluate_model(model, val_examples, batch_size=args.batch_size, temperature=args.temperature, writer=writer, step=global_step)
             
         # Save Checkpoint
         if f1 > best_f1:
             best_f1 = f1
+            best_step = global_step
             checkpoint_path = os.path.join(args.output_dir, f"best_checkpoint.pt")
             trainer.save_checkpoint(checkpoint_path)
             logging.info(f"  Saved best checkpoint to {checkpoint_path} at epoch {epoch+1}")
 
     # 6. Evaluation
-    logging.info("Running final evaluation on validation set...")
-    evaluate_model(model, val_examples, batch_size=args.batch_size, writer=writer, step=global_step)
+    logging.info("Running final evaluation of best checkpoint on validation set...")
+    checkpoint_path = os.path.join(args.output_dir, f"best_checkpoint.pt")
+    trainer.load_checkpoint(checkpoint_path)
+    evaluate_model(model, val_examples, batch_size=args.batch_size, temperature=args.temperature, writer=None, step=best_step)
     
     writer.close()
     

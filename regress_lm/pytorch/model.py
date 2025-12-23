@@ -253,8 +253,11 @@ class PyTorchModel(nn.Module, core.Model[Tensor]):
       masked_logits = (1.0 - curr_mask) * NEG_INF + curr_mask * logits
 
       # Apply temperature sampling, 1 token for each of the B*S sequences
-      probs = F.softmax(masked_logits / temperature, dim=-1)
-      token_ids = torch.multinomial(probs, num_samples=1)  # (B*S, 1)
+      if temperature > 0.0:
+        probs = F.softmax(masked_logits / temperature, dim=-1)
+        token_ids = torch.multinomial(probs, num_samples=1)  # (B*S, 1)
+      else:
+        token_ids = torch.argmax(masked_logits, dim=-1, keepdim=True)
       # Store the predicted token IDs
       generated_sequences_ids[:, step_idx] = token_ids.squeeze(-1)
 

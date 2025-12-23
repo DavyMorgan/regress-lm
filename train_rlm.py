@@ -19,11 +19,12 @@ from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 
 from regress_lm import core
-from regress_lm import vocabs
 from regress_lm import tokenizers
+from regress_lm import vocabs
+from regress_lm.pytorch import data_utils
+from regress_lm.pytorch import encoders
 from regress_lm.pytorch import model as model_lib
 from regress_lm.pytorch import training
-from regress_lm.pytorch import data_utils
 
 from ordered_set import OrderedSet
 
@@ -206,6 +207,7 @@ def main():
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--gpu', action='store_true', help='Use GPU if available')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for data splitting')
+    parser.add_argument('--encoder_type', type=str, default='vanilla', choices=['vanilla', 't5gemma'], help='Encoder type')
     parser.add_argument('--d_model', type=int, default=512, help='Model dimension')
     parser.add_argument('--num_encoder_layers', type=int, default=6, help='Number of encoder layers')
     parser.add_argument('--num_decoder_layers', type=int, default=6, help='Number of decoder layers')
@@ -264,16 +266,24 @@ def main():
     )
 
     # 3. Model Configuration
+    architecture_kwargs = {
+        'd_model': args.d_model,
+        'num_encoder_layers': args.num_encoder_layers,
+        'num_decoder_layers': args.num_decoder_layers,
+    }
+    if args.encoder_type == 'vanilla':
+        architecture_kwargs['encoder_type'] = encoders.EncoderType.VANILLA
+    elif args.encoder_type == 't5gemma':
+        architecture_kwargs['encoder_type'] = encoders.EncoderType.T5GEMMA
+        architecture_kwargs['additional_encoder_kwargs'] = {'model_name': 'google/t5gemma-s-s-prefixlm'}
+    else:
+        raise ValueError(f"Unsupported encoder type: {args.encoder_type}")
     config = model_lib.PyTorchModelConfig(
         encoder_vocab=encoder_vocab,
         decoder_vocab=decoder_vocab,
         max_input_len=args.max_input_len,
         max_num_objs=1,
-        architecture_kwargs={
-            'd_model': args.d_model, 
-            'num_encoder_layers': args.num_encoder_layers, 
-            'num_decoder_layers': args.num_decoder_layers,
-        }
+        architecture_kwargs=architecture_kwargs
     )
     
     device = torch.device('cuda' if args.gpu and torch.cuda.is_available() else 'cpu')

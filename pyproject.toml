@@ -10,14 +10,15 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "absl-py",
+    "gcsfs",
+    "ijson",
     "numpy",
     "ordered-set",
-    "gcsfs",
-    "tokenizers",
-    "sentencepiece",
-    "torch",
     "peft",
+    "sentencepiece",
     "tensorboard",
+    "tokenizers",
+    "torch",
 ]
 
 [project.optional-dependencies]

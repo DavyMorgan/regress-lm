@@ -17,6 +17,7 @@ dependencies = [
     "sentencepiece",
     "torch",
     "peft",
+    "tensorboard",
 ]
 
 [project.optional-dependencies]

@@ -5,6 +5,7 @@ Supports JSON formats.
 
 import argparse
 import json
+import logging
 import os
 import pathlib
 import random
@@ -103,13 +104,13 @@ def load_data(path: str, ghs_map: dict[str, str]) -> List[core.Example]:
     else:
         raise ValueError(f"Unsupported file extension: {ext}. Use .json")
         
-    print(f"Loaded {len(examples)} examples from {path}")
+    logging.info(f"Loaded {len(examples)} examples from {path}")
     return examples
 
 
 def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=16, writer=None, step: int = 0):
     model.eval()
-    print("Evaluating...")
+    logging.info("Evaluating...")
     
     total_precision = 0.0
     total_recall = 0.0
@@ -154,9 +155,9 @@ def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], 
     avg_prec = total_precision / count if count > 0 else 0.0
     avg_rec = total_recall / count if count > 0 else 0.0
     
-    print(f"Evaluation Results on {count} instances:")
-    print(f"  Average Precision: {avg_prec:.4f}")
-    print(f"  Average Recall:    {avg_rec:.4f}")
+    logging.info(f"Evaluation Results on {count} instances:")
+    logging.info(f"  Average Precision: {avg_prec:.4f}")
+    logging.info(f"  Average Recall:    {avg_rec:.4f}")
 
     if writer:
         writer.add_scalar('Eval/Precision', avg_prec, step)
@@ -173,7 +174,7 @@ def train_vocab(examples: List[core.Example], vocab_size: int, output_prefix: st
             if include_targets and isinstance(ex.y, str):
                  f.write(ex.y + '\n')
             
-    print(f"Training vocabulary of size {vocab_size} on {temp_corpus}...")
+    logging.info(f"Training vocabulary of size {vocab_size} on {temp_corpus}...")
     vocab = vocabs.SentencePieceVocab.from_corpus(
         corpus_path=temp_corpus,
         vocab_size=vocab_size,
@@ -216,39 +217,39 @@ def main():
     # Initialize TensorBoard Writer
     writer = SummaryWriter(log_dir=args.output_dir)
     
-    print(f"Loading GHS map from {args.ghs_path}")
+    logging.info(f"Loading GHS map from {args.ghs_path}")
     with open(args.ghs_path, 'r') as f:
         ghs_map = json.load(f)
 
     # 1. Load Data
-    print(f"Loading data from {args.data_path}")
+    logging.info(f"Loading data from {args.data_path}")
     all_examples = load_data(args.data_path, ghs_map=ghs_map)
     
     # 2. Split Data (80/20)
-    print(f"Splitting data with seed {args.seed}...")
+    logging.info(f"Splitting data with seed {args.seed}...")
     rng = random.Random(args.seed)
     rng.shuffle(all_examples)
     
     split_idx = int(len(all_examples) * 0.8)
     train_examples = all_examples[:split_idx]
     val_examples = all_examples[split_idx:]
-    print(f"Train size: {len(train_examples)}")
-    print(f"Val size: {len(val_examples)}")
+    logging.info(f"Train size: {len(train_examples)}")
+    logging.info(f"Val size: {len(val_examples)}")
 
     # 3. Setup Vocabulary
     vocab_prefix = os.path.join(args.output_dir, 'sentencepiece')
     vocab_model_path = vocab_prefix + '.model'
     
     if os.path.exists(vocab_model_path):
-        print(f"Loading existing vocabulary from {vocab_model_path}")
+        logging.info(f"Loading existing vocabulary from {vocab_model_path}")
         encoder_vocab = vocabs.SentencePieceVocab(vocab_model_path)
     else:
-        print("Training new vocabulary...")
+        logging.info("Training new vocabulary...")
         encoder_vocab = train_vocab(train_examples, args.vocab_size, vocab_prefix)
 
     # Decoder Vocab Selection
     # GHS Mode: Use HazardCodeTokenizer
-    print("Using HazardCodeTokenizer for Decoder (GHS Mode)")
+    logging.info("Using HazardCodeTokenizer for Decoder (GHS Mode)")
     decoder_vocab = vocabs.DecoderVocab(
         tokenizers.HazardCodeTokenizer(
             all_hazard_codes=list(ghs_map.keys())+['NULL', 'STOP'],
@@ -270,7 +271,7 @@ def main():
     )
     
     device = torch.device('cuda' if args.gpu and torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    logging.info(f"Using device: {device}")
     
     model = config.make_model(compile_model=False) 
     model.to(device)
@@ -292,37 +293,37 @@ def main():
     )
 
     # 5. Training Loop
-    print("Starting training...")
+    logging.info("Starting training...")
     steps_per_epoch = len(train_examples) // args.batch_size
     train_dl = trainer.train_dl
     
     global_step = 0
-    for epoch in range(args.epochs):
-        print(f"Epoch {epoch+1}/{args.epochs}")
+    for epoch in tqdm(range(args.epochs), desc="Epoch", leave=True, position=0):
+        logging.info(f"Epoch {epoch+1}/{args.epochs}")
         
         # Train
         epoch_losses = []
-        for i, batch in enumerate(train_dl):
+        for i, batch in enumerate(tqdm(train_dl, desc="Train Step", leave=False, position=1)):
             global_step += 1
             metrics = trainer.run_train_step(batch)
             loss = metrics.get('train_loss_mean', 0.0)
             perplexity = metrics.get('train_perplexity', 0.0)
             epoch_losses.append(loss)
             
-            if i % 10 == 0:
-                print(f"  Step {i}/{steps_per_epoch} - Loss: {loss:.4f}")
+            if i % (steps_per_epoch // 10) == 0:
+                logging.info(f"  Step {i}/{steps_per_epoch} - Loss: {loss:.4f}")
                 writer.add_scalar('Train/Loss', loss, global_step)
                 writer.add_scalar('Train/Perplexity', perplexity, global_step)
                 
         avg_train_loss = sum(epoch_losses) / len(epoch_losses) if epoch_losses else 0.0
-        print(f"  Avg Train Loss: {avg_train_loss:.4f}")
+        logging.info(f"  Avg Train Loss: {avg_train_loss:.4f}")
         writer.add_scalar('Train/Avg_Loss', avg_train_loss, global_step)
         
         # Validation
         val_metrics = trainer.run_validation_epoch()
         val_loss = val_metrics.get('validation_loss', -1.0)
         val_ppl = val_metrics.get('validation_perplexity', -1.0)
-        print(f"  Val Loss: {val_loss:.4f}")
+        logging.info(f"  Val Loss: {val_loss:.4f}")
         
         writer.add_scalar('Val/Loss', val_loss, global_step)
         writer.add_scalar('Val/Perplexity', val_ppl, global_step)
@@ -330,13 +331,14 @@ def main():
         # Save Checkpoint
         checkpoint_path = os.path.join(args.output_dir, f"checkpoint_epoch_{epoch+1}.pt")
         trainer.save_checkpoint(checkpoint_path)
-        print(f"  Saved checkpoint to {checkpoint_path}")
+        logging.info(f"  Saved checkpoint to {checkpoint_path}")
 
     # 6. Evaluation
-    print("\nRunning final evaluation on validation set...")
+    logging.info("\nRunning final evaluation on validation set...")
     evaluate_model(model, val_examples, batch_size=args.batch_size, writer=writer, step=global_step)
     
     writer.close()
     
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     main()

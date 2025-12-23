@@ -200,6 +200,9 @@ def main():
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--gpu', action='store_true', help='Use GPU if available')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for data splitting')
+    parser.add_argument('--d_model', type=int, default=512, help='Model dimension')
+    parser.add_argument('--num_encoder_layers', type=int, default=6, help='Number of encoder layers')
+    parser.add_argument('--num_decoder_layers', type=int, default=6, help='Number of decoder layers')
 
     args = parser.parse_args()
     
@@ -260,9 +263,9 @@ def main():
         max_input_len=args.max_input_len,
         max_num_objs=1,
         architecture_kwargs={
-            'd_model': 512, 
-            'num_encoder_layers': 6, 
-            'num_decoder_layers': 6,
+            'd_model': args.d_model, 
+            'num_encoder_layers': args.num_encoder_layers, 
+            'num_decoder_layers': args.num_decoder_layers,
         }
     )
     

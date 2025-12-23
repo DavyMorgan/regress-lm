@@ -4,3 +4,4 @@ test_output
 .venv
 regress_lm.egg-info
 *.json
+.DS_Store

@@ -29,7 +29,7 @@ from regress_lm.pytorch import training
 from ordered_set import OrderedSet
 
 
-def preprocess_ghs_example(item, ghs_map, add_other_features: bool = False):
+def preprocess_ghs_example(item, ghs_map, keys_map, add_auxiliary_features: bool = False):
     """
     Custom preprocessing for PubChem/GHS task.
     x: ALL features EXCLUDING 'GHS Codes' + 'Dosage'.
@@ -62,9 +62,9 @@ def preprocess_ghs_example(item, ghs_map, add_other_features: bool = False):
     x_obj['Dosage'] = dosages
     
     # Add remaining keys
-    if add_other_features:
+    if add_auxiliary_features:
         for k, v in item.items():
-            if k not in ['SMILES', 'GHS Codes', 'GHS Classification', 'Hazards Summary', 'Health Hazards']:
+            if k in keys_map['non_hazard_keys'] and k != 'SMILES':
                 x_obj[k] = v
     
     x_str = json.dumps(x_obj)
@@ -81,7 +81,7 @@ def preprocess_ghs_example(item, ghs_map, add_other_features: bool = False):
     return x_str, y_str
 
 
-def load_data(path: str, ghs_map: dict[str, str]) -> List[core.Example]:
+def load_data(path: str, ghs_map: dict[str, str], keys_map: dict[str, str], add_auxiliary_features: bool = False) -> List[core.Example]:
     """Loads data from JSON file."""
     examples = []
     path = pathlib.Path(path)
@@ -98,9 +98,11 @@ def load_data(path: str, ghs_map: dict[str, str]) -> List[core.Example]:
                 raise ValueError("JSON file must contain a list of objects.")
             for item in tqdm(data):
                 try:
-                    x_val, y_val = preprocess_ghs_example(item, ghs_map)
+                    x_val, y_val = preprocess_ghs_example(item, ghs_map, keys_map, add_auxiliary_features)
                     examples.append(core.Example(x=x_val, y=y_val)) 
                 except Exception as e:
+                    logging.error(f"Failed to process item: {item}")
+                    logging.error(f"Error: {e}")
                     pass
     else:
         raise ValueError(f"Unsupported file extension: {ext}. Use .json")
@@ -198,6 +200,8 @@ def main():
     parser = argparse.ArgumentParser(description='Train RegressLM on custom data')
     parser.add_argument('--data_path', type=str, required=True, help='Path to data')
     parser.add_argument('--ghs_path', type=str, default=None, help='Path to ghs_hazard_statements.json for custom preprocessing')
+    parser.add_argument('--keys_path', type=str, default=None, help='Path to keys_classification.json for custom preprocessing')
+    parser.add_argument('--add_auxiliary_features', action='store_true', help='Add auxiliary features to input')
     parser.add_argument('--output_dir', type=str, default='output', help='Output directory')
     parser.add_argument('--vocab_size', type=int, default=8192, help='Vocabulary size')
     parser.add_argument('--max_input_len', type=int, default=512, help='Max input length')
@@ -225,13 +229,17 @@ def main():
     # Initialize TensorBoard Writer
     writer = SummaryWriter(log_dir=args.output_dir)
     
+    # 1. Load Data
     logging.info(f"Loading GHS map from {args.ghs_path}")
     with open(args.ghs_path, 'r') as f:
         ghs_map = json.load(f)
 
-    # 1. Load Data
+    logging.info(f"Loading keys classification from {args.keys_path}")
+    with open(args.keys_path, 'r') as f:
+        keys_map = json.load(f)
+
     logging.info(f"Loading data from {args.data_path}")
-    all_examples = load_data(args.data_path, ghs_map=ghs_map)
+    all_examples = load_data(args.data_path, ghs_map=ghs_map, keys_map=keys_map, add_auxiliary_features=args.add_auxiliary_features)
     
     # 2. Split Data (80/20)
     logging.info(f"Splitting data with seed {args.seed}...")

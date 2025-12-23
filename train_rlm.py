@@ -110,7 +110,7 @@ def load_data(path: str, ghs_map: dict[str, str]) -> List[core.Example]:
 
 def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=16, writer=None, step: int = 0):
     model.eval()
-    logging.info("Evaluating...")
+    logging.info(f"Evaluating at step {step}...")
     
     total_precision = 0.0
     total_recall = 0.0
@@ -154,14 +154,19 @@ def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], 
                  
     avg_prec = total_precision / count if count > 0 else 0.0
     avg_rec = total_recall / count if count > 0 else 0.0
+    f1 = 2 * avg_prec * avg_rec / (avg_prec + avg_rec) if avg_prec + avg_rec > 0 else 0.0
     
     logging.info(f"Evaluation Results on {count} instances:")
     logging.info(f"  Average Precision: {avg_prec:.4f}")
     logging.info(f"  Average Recall:    {avg_rec:.4f}")
+    logging.info(f"  Average F1:        {f1:.4f}")
 
     if writer:
         writer.add_scalar('Eval/Precision', avg_prec, step)
         writer.add_scalar('Eval/Recall', avg_rec, step)
+        writer.add_scalar('Eval/F1', f1, step)
+
+    return avg_prec, avg_rec, f1
 
 
 def train_vocab(examples: List[core.Example], vocab_size: int, output_prefix: str, include_targets: bool = False) -> vocabs.SentencePieceVocab:
@@ -298,6 +303,11 @@ def main():
     train_dl = trainer.train_dl
     
     global_step = 0
+
+    logging.info("Running initial evaluation on validation set...")
+    _, _, f1 = evaluate_model(model, val_examples, batch_size=args.batch_size, writer=writer, step=global_step)
+    best_f1 = f1
+
     for epoch in tqdm(range(args.epochs), desc="Epoch", leave=True, position=0):
         logging.info(f"Epoch {epoch+1}/{args.epochs}")
         
@@ -310,8 +320,8 @@ def main():
             perplexity = metrics.get('train_perplexity', 0.0)
             epoch_losses.append(loss)
             
-            if i % (steps_per_epoch // 10) == 0:
-                logging.info(f"  Step {i}/{steps_per_epoch} - Loss: {loss:.4f}")
+            if (i + 1) % (steps_per_epoch // 10) == 0:
+                logging.info(f"  Step {i+1}/{steps_per_epoch} - Loss: {loss:.4f}")
                 writer.add_scalar('Train/Loss', loss, global_step)
                 writer.add_scalar('Train/Perplexity', perplexity, global_step)
                 
@@ -327,14 +337,18 @@ def main():
         
         writer.add_scalar('Val/Loss', val_loss, global_step)
         writer.add_scalar('Val/Perplexity', val_ppl, global_step)
+
+        _, _, f1 = evaluate_model(model, val_examples, batch_size=args.batch_size, writer=writer, step=global_step)
             
         # Save Checkpoint
-        checkpoint_path = os.path.join(args.output_dir, f"checkpoint_epoch_{epoch+1}.pt")
-        trainer.save_checkpoint(checkpoint_path)
-        logging.info(f"  Saved checkpoint to {checkpoint_path}")
+        if f1 > best_f1:
+            best_f1 = f1
+            checkpoint_path = os.path.join(args.output_dir, f"best_checkpoint.pt")
+            trainer.save_checkpoint(checkpoint_path)
+            logging.info(f"  Saved best checkpoint to {checkpoint_path} at epoch {epoch+1}")
 
     # 6. Evaluation
-    logging.info("\nRunning final evaluation on validation set...")
+    logging.info("Running final evaluation on validation set...")
     evaluate_model(model, val_examples, batch_size=args.batch_size, writer=writer, step=global_step)
     
     writer.close()

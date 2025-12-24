@@ -1,17 +1,18 @@
 import argparse
-import logging
 import json
-import torch
+import logging
 import random
+
 import numpy as np
+import torch
 
 from regress_lm import vocabs
 from regress_lm import tokenizers
 from regress_lm.pytorch import encoders
 from regress_lm.pytorch import model as model_lib
 
-# Import functions from training script
-from train_rlm import load_data, evaluate_model
+from utils import load_data, evaluate_model
+
 
 def main():
     parser = argparse.ArgumentParser(description='Test RegressLM')

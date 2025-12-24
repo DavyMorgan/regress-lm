@@ -34,9 +34,15 @@ def main():
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--gpu', action='store_true', help='Use GPU')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--num_samples', type=int, default=1, help='Number of generated responses per example')
     parser.add_argument('--temperature', type=float, default=0.0, help='Temperature')
     
     args = parser.parse_args()
+
+    if args.num_samples > 1:
+        assert args.temperature > 0.0, "Temperature must be greater than 0.0 when num_samples > 1"
+    if args.num_samples == 1:
+        assert args.temperature == 0.0, "Temperature must be 0.0 when num_samples == 1"
     
     # Setup Logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -113,7 +119,7 @@ def main():
     model.load_state_dict(checkpoint['model_state'])
     
     # Run Evaluation
-    evaluate_model(model, val_examples, batch_size=args.batch_size, temperature=args.temperature)
+    evaluate_model(model, val_examples, batch_size=args.batch_size, num_samples=args.num_samples, temperature=args.temperature)
 
 if __name__ == '__main__':
     main()

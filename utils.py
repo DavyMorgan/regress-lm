@@ -5,6 +5,7 @@ import pathlib
 from tqdm import tqdm
 from typing import List
 
+import numpy as np
 import torch
 
 from regress_lm import core
@@ -92,7 +93,7 @@ def load_data(path: str, ghs_map: dict[str, str], keys_map: dict[str, str], add_
     return examples
 
 
-def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=16, temperature=0.0, writer=None, step: int = 0):
+def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=16, num_samples=1, temperature=0.0, writer=None, step: int = 0):
     model.eval()
     logging.info(f"Evaluating at step {step}...")
     
@@ -107,10 +108,27 @@ def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], 
         collate_fn=model.converter.convert_examples,
         shuffle=False
     )
+
+    def best_of_n_vote(preds: List[str]) -> OrderedSet[str]:
+        pred = " ".join(preds)
+        pred = [c for c in pred.split() if c != 'STOP']
+        if num_samples == 1:
+            return OrderedSet(pred)
+        unique_codes, counts = np.unique(pred, return_counts=True)
+        sorted_codes = [c for c, _ in sorted(zip(unique_codes, counts), key=lambda x: x[1], reverse=True)]
+        if sorted_codes[0] == 'NULL':
+            sorted_codes = ['NULL']
+        else:
+            if 'NULL' in sorted_codes:
+                sorted_codes.remove('NULL')
+            num_pred_codes = min(len(pred)//num_samples, len(sorted_codes))
+            sorted_codes = sorted_codes[:num_pred_codes]
+        return OrderedSet(sorted_codes)
+        
     
-    def compute_instance_metrics(args: tuple[core.Example, str]):
+    def compute_instance_metrics(args: tuple[core.Example, OrderedSet[str]]):
         ex, pred = args
-        pred_set = OrderedSet([c for c in pred.split() if c != 'STOP'])
+        pred_set = pred
         gold_set = OrderedSet(ex.y[0].split()[:-1])
 
         tp = len(gold_set.intersection(pred_set))
@@ -122,14 +140,15 @@ def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], 
         for i, batch in enumerate(tqdm(dl)):
             # batch is dict. decode returns (ids, output_objs)
             # output_objs: (B, num_samples, max_num_objs)
-            _, output_objs = model.decode(batch, num_samples=1, temperature=temperature)
+            _, output_objs = model.decode(batch, num_samples=num_samples, temperature=temperature)
             
             start_idx = i * batch_size
             current_batch_size = output_objs.shape[0]
             batch_examples = examples[start_idx : start_idx + current_batch_size]
 
-            # output_objs[:, 0] gives the first sample for each item in batch
-            batch_results = list(map(compute_instance_metrics, zip(batch_examples, output_objs[:, 0, 0])))
+            output_objs = output_objs.squeeze(-1) # (B, num_samples)
+            output_objs = list(map(best_of_n_vote, output_objs)) # (B)
+            batch_results = list(map(compute_instance_metrics, zip(batch_examples, output_objs)))
             
             batch_prec, batch_rec = zip(*batch_results)
             total_precision += sum(batch_prec)

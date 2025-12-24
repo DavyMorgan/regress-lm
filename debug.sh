@@ -12,4 +12,6 @@ python3 train_rlm.py \
     --num_encoder_layers 2 \
     --num_decoder_layers 2 \
     --batch_size 4 \
+    --num_samples 5 \
+    --temperature 0.2 \
     --gpu

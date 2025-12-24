@@ -38,8 +38,6 @@ def preprocess_ghs_example(item, ghs_map, keys_map, add_auxiliary_features: bool
     # 1. Extract Hazards
     ghs_codes = item.get('GHS Codes', {})
     hazards = ghs_codes.get('Hazards', [])
-    if not isinstance(hazards, list):
-      raise ValueError(f"Expected 'Hazards' to be a list, but got {type(hazards)}")
     # 2. Dosage Lookup
     # Dosage is list of Categories for each Hazard code.
     dosages = []
@@ -199,15 +197,15 @@ def train_vocab(examples: List[core.Example], vocab_size: int, output_prefix: st
 def main():
     parser = argparse.ArgumentParser(description='Train RegressLM on custom data')
     parser.add_argument('--data_path', type=str, required=True, help='Path to data')
-    parser.add_argument('--ghs_path', type=str, default=None, help='Path to ghs_hazard_statements.json for custom preprocessing')
-    parser.add_argument('--keys_path', type=str, default=None, help='Path to keys_classification.json for custom preprocessing')
+    parser.add_argument('--ghs_path', type=str, default='ghs_hazard_statements.json', help='Path to ghs_hazard_statements.json for custom preprocessing')
+    parser.add_argument('--keys_path', type=str, default='keys_classification.json', help='Path to keys_classification.json for custom preprocessing')
     parser.add_argument('--add_auxiliary_features', action='store_true', help='Add auxiliary features to input')
-    parser.add_argument('--output_dir', type=str, default='output', help='Output directory')
+    parser.add_argument('--output_dir', type=str, required=True, help='Output directory')
     parser.add_argument('--vocab_size', type=int, default=8192, help='Vocabulary size')
-    parser.add_argument('--max_input_len', type=int, default=512, help='Max input length')
+    parser.add_argument('--max_input_len', type=int, default=4096, help='Max input length')
     parser.add_argument('--max_num_hazard_codes', type=int, default=30, help='Max number of hazard codes per example')
-    parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
-    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs')
+    parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
+    parser.add_argument('--epochs', type=int, default=30, help='Number of epochs')
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--gpu', action='store_true', help='Use GPU if available')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for data splitting')
@@ -301,7 +299,7 @@ def main():
     model.to(device)
 
     # 4. Training Setup
-    optimizer_factory = lambda params: optim.AdamW(params, lr=args.lr)
+    optimizer_factory = lambda params: optim.AdamW(params, lr=args.lr, weight_decay=0.1, betas=(0.9, 0.95))
     scheduler_factory = lambda opt: lr_scheduler.StepLR(opt, step_size=1, gamma=0.95) # Simple decay
 
     train_ds = data_utils.ExampleDataset(train_examples)

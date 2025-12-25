@@ -5,9 +5,12 @@ python3 test_rlm.py \
     --ghs_path ghs_hazard_statements.json \
     --keys_path keys_classification.json \
     --vocab_path debug_large_test/sentencepiece.model \
+    --max_input_len 128 \
     --encoder_type vanilla \
     --d_model 512 \
     --num_encoder_layers 6 \
     --num_decoder_layers 6 \
     --batch_size 128 \
+    --num_samples 5 \
+    --temperature 0.1 \
     --gpu

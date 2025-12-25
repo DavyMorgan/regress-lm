@@ -60,10 +60,10 @@ def main():
     parser.add_argument('--add_auxiliary_features', action='store_true', help='Add auxiliary features to input')
     parser.add_argument('--output_dir', type=str, required=True, help='Output directory')
     parser.add_argument('--vocab_size', type=int, default=8192, help='Vocabulary size')
-    parser.add_argument('--max_input_len', type=int, default=4096, help='Max input length')
+    parser.add_argument('--max_input_len', type=int, default=512, help='Max input length')
     parser.add_argument('--max_num_hazard_codes', type=int, default=30, help='Max number of hazard codes per example')
     parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
-    parser.add_argument('--epochs', type=int, default=30, help='Number of epochs')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--gpu', action='store_true', help='Use GPU if available')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for data splitting')
@@ -71,8 +71,8 @@ def main():
     parser.add_argument('--d_model', type=int, default=512, help='Model dimension')
     parser.add_argument('--num_encoder_layers', type=int, default=6, help='Number of encoder layers')
     parser.add_argument('--num_decoder_layers', type=int, default=6, help='Number of decoder layers')
-    parser.add_argument('--num_samples', type=int, default=1, help='Number of generated responses per example')
-    parser.add_argument('--temperature', type=float, default=0.0, help='Temperature for decoding')
+    parser.add_argument('--num_samples', type=int, default=5, help='Number of generated responses per example')
+    parser.add_argument('--temperature', type=float, default=1.0, help='Temperature for decoding')
 
     args = parser.parse_args()
 

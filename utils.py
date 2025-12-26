@@ -13,7 +13,7 @@ from regress_lm.pytorch import data_utils
 from regress_lm.pytorch import model as model_lib
 
 
-def preprocess_ghs_example(item, ghs_map, keys_map, add_auxiliary_features: bool = False):
+def preprocess_ghs_example(item, ghs_map, keys_map, add_dosage: bool = False, add_auxiliary_features: bool = False):
     """
     Custom preprocessing for PubChem/GHS task.
     x: ALL features EXCLUDING 'GHS Codes' + 'Dosage'.
@@ -22,17 +22,8 @@ def preprocess_ghs_example(item, ghs_map, keys_map, add_auxiliary_features: bool
     # 1. Extract Hazards
     ghs_codes = item.get('GHS Codes', {})
     hazards = ghs_codes.get('Hazards', [])
-    # 2. Dosage Lookup
-    # Dosage is list of Categories for each Hazard code.
-    dosages = []
-    for h_code in hazards:
-        info = ghs_map.get(h_code)
-        if info:
-            dosages.append(info.get('category', 'Unknown'))
-        else:
-            dosages.append('Unknown')
     
-    # 3. Construct X
+    # 2. Construct X
     # Reorder keys: SMILES, Dosage, then others
     x_obj = {}
     
@@ -41,7 +32,16 @@ def preprocess_ghs_example(item, ghs_map, keys_map, add_auxiliary_features: bool
     else:
         raise ValueError("Missing 'SMILES' key in input data")
 
-    x_obj['Dosage'] = dosages
+    if add_dosage:
+        # Dosage is list of Categories for each Hazard code.
+        dosages = []
+        for h_code in hazards:
+            info = ghs_map.get(h_code)
+            if info:
+                dosages.append(info.get('category', 'Unknown'))
+            else:
+                dosages.append('Unknown')
+        x_obj['Dosage'] = dosages
     
     # Add remaining keys
     if add_auxiliary_features:
@@ -51,7 +51,7 @@ def preprocess_ghs_example(item, ghs_map, keys_map, add_auxiliary_features: bool
     
     x_str = json.dumps(x_obj)
     
-    # 4. Construct Y
+    # 3. Construct Y
     # Return list of hazard codes
     # If using HazardCodeTokenizer, y should be List[str]
     if len(hazards) == 0:
@@ -63,7 +63,7 @@ def preprocess_ghs_example(item, ghs_map, keys_map, add_auxiliary_features: bool
     return x_str, y_str
 
 
-def load_data(path: str, ghs_map: dict[str, str], keys_map: dict[str, str], add_auxiliary_features: bool = False) -> List[core.Example]:
+def load_data(path: str, ghs_map: dict[str, str], keys_map: dict[str, str], add_dosage: bool = False, add_auxiliary_features: bool = False) -> List[core.Example]:
     """Loads data from JSON file."""
     examples = []
     path = pathlib.Path(path)
@@ -80,7 +80,7 @@ def load_data(path: str, ghs_map: dict[str, str], keys_map: dict[str, str], add_
                 raise ValueError("JSON file must contain a list of objects.")
             for item in tqdm(data):
                 try:
-                    x_val, y_val = preprocess_ghs_example(item, ghs_map, keys_map, add_auxiliary_features)
+                    x_val, y_val = preprocess_ghs_example(item, ghs_map, keys_map, add_dosage, add_auxiliary_features)
                     examples.append(core.Example(x=x_val, y=y_val)) 
                 except Exception as e:
                     logging.error(f"Failed to process item: {item}")

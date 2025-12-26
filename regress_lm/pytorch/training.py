@@ -216,7 +216,7 @@ class Trainer:
 
   def load_checkpoint(self, checkpoint_path: str) -> None:
     """Loads the training state from a checkpoint file."""
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     self.model.load_state_dict(checkpoint['model_state'])
     self._optimizer.load_state_dict(checkpoint['optimizer_state'])
     self._scheduler.load_state_dict(checkpoint['scheduler_state'])

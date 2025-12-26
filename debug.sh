@@ -11,6 +11,8 @@ python3 train_rlm.py \
     --d_model 64 \
     --num_encoder_layers 2 \
     --num_decoder_layers 2 \
+    --warmup_steps 10 \
+    --hold_steps 10 \
     --batch_size 4 \
     --num_samples 5 \
     --temperature 0.2 \

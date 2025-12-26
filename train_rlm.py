@@ -52,6 +52,28 @@ def train_vocab(examples: List[core.Example], vocab_size: int, output_prefix: st
     return vocab
 
 
+def get_scheduler(optimizer, warmup_steps, hold_steps, total_steps, init_lr, min_lr):
+    """
+    Creates a learning rate scheduler with warmup, hold, and cosine decay phases.
+    """
+    min_multiplicative_factor = min_lr / init_lr
+    def lr_lambda(current_step):
+        if current_step < warmup_steps:
+            return float(current_step) / float(max(1, warmup_steps))
+        elif current_step < warmup_steps + hold_steps:
+            return 1.0
+        else:
+            # Cosine decay
+            decay_steps = total_steps - warmup_steps - hold_steps
+            if decay_steps <= 0:
+                return min_multiplicative_factor
+            
+            progress = float(current_step - warmup_steps - hold_steps) / float(max(1, decay_steps))
+            return max(min_multiplicative_factor, 0.5 * (1.0 + np.cos(np.pi * progress)))
+
+    return lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Train RegressLM on custom data')
     parser.add_argument('--data_path', type=str, required=True, help='Path to data')
@@ -65,6 +87,9 @@ def main():
     parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
+    parser.add_argument('--warmup_steps', type=int, default=1000, help='Number of warmup steps')
+    parser.add_argument('--hold_steps', type=int, default=1000, help='Number of hold steps')
+    parser.add_argument('--min_lr', type=float, default=1e-6, help='Minimum LR after decay')
     parser.add_argument('--gpu', action='store_true', help='Use GPU if available')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for data splitting')
     parser.add_argument('--encoder_type', type=str, default='vanilla', choices=['vanilla', 't5gemma'], help='Encoder type')
@@ -161,8 +186,18 @@ def main():
     model.to(device)
 
     # 4. Training Setup
-    optimizer_factory = lambda params: optim.AdamW(params, lr=args.lr, weight_decay=0.1, betas=(0.9, 0.95))
-    scheduler_factory = lambda opt: lr_scheduler.StepLR(opt, step_size=1, gamma=0.95) # Simple decay
+    steps_per_epoch = len(train_examples) // args.batch_size
+    total_steps = args.epochs * steps_per_epoch
+    
+    optimizer_factory = lambda params: optim.AdamW(params, lr=args.lr, weight_decay=0.05, betas=(0.9, 0.95))
+    scheduler_factory = lambda opt: get_scheduler(
+        opt, 
+        warmup_steps=args.warmup_steps, 
+        hold_steps=args.hold_steps, 
+        total_steps=total_steps,
+        init_lr=args.lr,
+        min_lr=args.min_lr
+    )
 
     train_ds = data_utils.ExampleDataset(train_examples)
     val_ds = data_utils.ExampleDataset(val_examples)
@@ -178,7 +213,6 @@ def main():
 
     # 5. Training Loop
     logging.info("Starting training...")
-    steps_per_epoch = len(train_examples) // args.batch_size
     train_dl = trainer.train_dl
     
     global_step = 0

@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--data_path', type=str, required=True, help='Path to test data')
     parser.add_argument('--ghs_path', type=str, default='ghs_hazard_statements.json', help='Path to ghs_hazard_statements.json for custom preprocessing')
     parser.add_argument('--keys_path', type=str, default='keys_classification.json', help='Path to keys_classification.json for custom preprocessing')
+    parser.add_argument('--add_dosage', action='store_true', help='Add dosage to input')
     parser.add_argument('--add_auxiliary_features', action='store_true', help='Include auxiliary features')
     parser.add_argument('--vocab_path', type=str, required=True, help='Path to sentencepiece model')
     
@@ -67,7 +68,7 @@ def main():
         
     # Load Data
     logging.info(f"Loading data from {args.data_path}")
-    all_examples = load_data(args.data_path, ghs_map=ghs_map, keys_map=keys_map, add_auxiliary_features=args.add_auxiliary_features)
+    all_examples = load_data(args.data_path, ghs_map=ghs_map, keys_map=keys_map, add_dosage=args.add_dosage, add_auxiliary_features=args.add_auxiliary_features)
     logging.info(f"Splitting data with seed {args.seed}...")
     rng = random.Random(args.seed)
     rng.shuffle(all_examples)
@@ -78,6 +79,16 @@ def main():
     # Load Vocabs
     logging.info(f"Loading encoder vocabulary from {args.vocab_path}")
     encoder_vocab = vocabs.SentencePieceVocab(args.vocab_path)
+
+    num_tokens_per_example = [len(encoder_vocab.to_token_ids(example.x)) for example in all_examples]
+    logging.info(f"Min tokens per example: {min(num_tokens_per_example)}")
+    logging.info(f"Max tokens per example: {max(num_tokens_per_example)}")
+    logging.info(f"Avg tokens per example: {sum(num_tokens_per_example) / len(num_tokens_per_example)}")
+    logging.info(f"Percentiles of tokens per example at 10, 25, 50, 75, 90: {np.percentile(num_tokens_per_example, [10, 25, 50, 75, 90])}")
+    if args.max_input_len < max(num_tokens_per_example):
+        logging.warning(f"Max input length {args.max_input_len} is less than max tokens per example {max(num_tokens_per_example)}")
+    args.max_input_len = min(max(num_tokens_per_example), args.max_input_len)
+    logging.info(f"Setting max_input_len to {args.max_input_len}")
     
     logging.info("Using HazardCodeTokenizer for Decoder")
     decoder_vocab = vocabs.DecoderVocab(

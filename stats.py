@@ -3,6 +3,7 @@ from collections import Counter
 import decimal
 import ijson
 import json
+import numpy as np
 import sys
 from tqdm import tqdm
 
@@ -38,6 +39,12 @@ def main():
         sys.exit(1)
         
     print(f"Index built. Found {len(smiles_counts)} unique SMILES among total items.")
+
+    smiles_length = [len(smiles) for smiles in smiles_counts.keys()]
+    print(f"Min SMILES length: {min(smiles_length)}")
+    print(f"Max SMILES length: {max(smiles_length)}")
+    print(f"Avg SMILES length: {sum(smiles_length) / len(smiles_length)}")
+    print(f"Percentiles of SMILES length at 10, 25, 50, 75, 90: {np.percentile(smiles_length, [10, 25, 50, 75, 90])}")
 
     # Pass 2: Filter and Write
     output_file = "pubchem.compound.dedup.json"

@@ -126,7 +126,7 @@ def main():
     
     # Load Checkpoint
     logging.info(f"Loading checkpoint from {args.checkpoint_path}")
-    checkpoint = torch.load(args.checkpoint_path, map_location=device)
+    checkpoint = torch.load(args.checkpoint_path, map_location=device, weights_only=False)
     model.load_state_dict(checkpoint['model_state'])
     
     # Run Evaluation

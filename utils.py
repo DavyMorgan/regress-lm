@@ -93,6 +93,36 @@ def load_data(path: str, ghs_map: dict[str, str], keys_map: dict[str, str], add_
     return examples
 
 
+def best_of_n_vote(preds: List[str]) -> OrderedSet[str]:
+    pred = " ".join(preds)
+    pred = [c for c in pred.split() if c != 'STOP']
+    unique_codes, counts = np.unique(pred, return_counts=True)
+    sorted_codes = [c for c, _ in sorted(zip(unique_codes, counts), key=lambda x: x[1], reverse=True)]
+    if sorted_codes[0] == 'NULL':
+        sorted_codes = ['NULL']
+    else:
+        if 'NULL' in sorted_codes:
+            sorted_codes.remove('NULL')
+        num_pred_codes = min(len(pred)//num_samples, len(sorted_codes))
+        sorted_codes = sorted_codes[:num_pred_codes]
+    return OrderedSet(sorted_codes)
+
+
+def unwrap_output_objs(pred: str) -> List[str]:
+    return OrderedSet([c for c in pred.split() if c != 'STOP'])
+    
+
+def compute_instance_metrics(args: tuple[core.Example, OrderedSet[str]]):
+    ex, pred = args
+    pred_set = pred
+    gold_set = OrderedSet(ex.y[0].split()[:-1])
+
+    tp = len(gold_set.intersection(pred_set))
+    prec = tp / len(pred_set) if len(pred_set) > 0 else 0.0
+    rec = tp / len(gold_set) if len(gold_set) > 0 else 0.0
+    return prec, rec
+
+
 def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=16, num_samples=1, temperature=0.0, writer=None, step: int = 0):
     model.eval()
     logging.info(f"Evaluating at step {step}...")
@@ -105,37 +135,10 @@ def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], 
     dl = torch.utils.data.DataLoader(
         ds, 
         batch_size=batch_size, 
-        collate_fn=model.converter.convert_examples,
+        collate_fn=model.converter.convert_inputs,
         shuffle=False
     )
 
-    def best_of_n_vote(preds: List[str]) -> OrderedSet[str]:
-        pred = " ".join(preds)
-        pred = [c for c in pred.split() if c != 'STOP']
-        if num_samples == 1:
-            return OrderedSet(pred)
-        unique_codes, counts = np.unique(pred, return_counts=True)
-        sorted_codes = [c for c, _ in sorted(zip(unique_codes, counts), key=lambda x: x[1], reverse=True)]
-        if sorted_codes[0] == 'NULL':
-            sorted_codes = ['NULL']
-        else:
-            if 'NULL' in sorted_codes:
-                sorted_codes.remove('NULL')
-            num_pred_codes = min(len(pred)//num_samples, len(sorted_codes))
-            sorted_codes = sorted_codes[:num_pred_codes]
-        return OrderedSet(sorted_codes)
-        
-    
-    def compute_instance_metrics(args: tuple[core.Example, OrderedSet[str]]):
-        ex, pred = args
-        pred_set = pred
-        gold_set = OrderedSet(ex.y[0].split()[:-1])
-
-        tp = len(gold_set.intersection(pred_set))
-        prec = tp / len(pred_set) if len(pred_set) > 0 else 0.0
-        rec = tp / len(gold_set) if len(gold_set) > 0 else 0.0
-        return prec, rec
-             
     with torch.no_grad():
         for i, batch in enumerate(tqdm(dl)):
             # batch is dict. decode returns (ids, output_objs)
@@ -147,7 +150,10 @@ def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], 
             batch_examples = examples[start_idx : start_idx + current_batch_size]
 
             output_objs = output_objs.squeeze(-1) # (B, num_samples)
-            output_objs = list(map(best_of_n_vote, output_objs)) # (B)
+            if num_samples > 1:
+                output_objs = list(map(best_of_n_vote, output_objs)) # (B)
+            else:
+                output_objs = list(map(unwrap_output_objs, output_objs.squeeze(-1)))
             batch_results = list(map(compute_instance_metrics, zip(batch_examples, output_objs)))
             
             batch_prec, batch_rec = zip(*batch_results)

@@ -32,7 +32,7 @@ def main():
     parser.add_argument('--num_encoder_layers', type=int, default=6, help='Number of encoder layers')
     parser.add_argument('--num_decoder_layers', type=int, default=6, help='Number of decoder layers')
     
-    parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
+    parser.add_argument('--eval_batch_size', type=int, default=128, help='Batch size')
     parser.add_argument('--gpu', action='store_true', help='Use GPU')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--num_samples', type=int, default=1, help='Number of generated responses per example')
@@ -130,7 +130,7 @@ def main():
     model.load_state_dict(checkpoint['model_state'])
     
     # Run Evaluation
-    evaluate_model(model, val_examples, batch_size=args.batch_size, num_samples=args.num_samples, temperature=args.temperature)
+    evaluate_model(model, val_examples, batch_size=args.eval_batch_size, num_samples=args.num_samples, temperature=args.temperature)
 
 if __name__ == '__main__':
     main()

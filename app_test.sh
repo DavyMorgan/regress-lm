@@ -11,7 +11,7 @@ python3 test_rlm.py \
     --d_model 512 \
     --num_encoder_layers 6 \
     --num_decoder_layers 6 \
-    --batch_size 256 \
+    --eval_batch_size 512 \
     --num_samples 1 \
     --temperature 0.0 \
     --gpu

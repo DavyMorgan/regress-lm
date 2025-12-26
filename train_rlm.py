@@ -85,7 +85,8 @@ def main():
     parser.add_argument('--vocab_size', type=int, default=8192, help='Vocabulary size')
     parser.add_argument('--max_input_len', type=int, default=512, help='Max input length')
     parser.add_argument('--max_num_hazard_codes', type=int, default=30, help='Max number of hazard codes per example')
-    parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
+    parser.add_argument('--train_batch_size', type=int, default=128, help='Batch size for training')
+    parser.add_argument('--eval_batch_size', type=int, default=512, help='Batch size for evaluation')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--warmup_steps', type=int, default=1000, help='Number of warmup steps')
@@ -197,7 +198,7 @@ def main():
     model.to(device)
 
     # 4. Training Setup
-    steps_per_epoch = len(train_examples) // args.batch_size
+    steps_per_epoch = len(train_examples) // args.train_batch_size
     total_steps = args.epochs * steps_per_epoch
     
     optimizer_factory = lambda params: optim.AdamW(params, lr=args.lr, weight_decay=0.05, betas=(0.9, 0.95))
@@ -219,7 +220,7 @@ def main():
         scheduler_factory=scheduler_factory,
         train_ds=train_ds,
         validation_ds=val_ds,
-        batch_size=args.batch_size,
+        batch_size=args.train_batch_size,
     )
 
     # 5. Training Loop
@@ -229,7 +230,7 @@ def main():
     global_step = 0
 
     logging.info("Running initial evaluation on validation set...")
-    _, _, f1 = evaluate_model(model, val_examples, batch_size=args.batch_size, num_samples=1, temperature=0.0, writer=writer, step=global_step)
+    _, _, f1 = evaluate_model(model, val_examples, batch_size=args.eval_batch_size, num_samples=1, temperature=0.0, writer=writer, step=global_step)
     best_f1 = f1
     best_step = global_step
     checkpoint_path = os.path.join(args.output_dir, f"best_checkpoint.pt")
@@ -265,7 +266,7 @@ def main():
         writer.add_scalar('Val/Loss', val_loss, global_step)
         writer.add_scalar('Val/Perplexity', val_ppl, global_step)
 
-        _, _, f1 = evaluate_model(model, val_examples, batch_size=args.batch_size, num_samples=1, temperature=0.0, writer=writer, step=global_step)
+        _, _, f1 = evaluate_model(model, val_examples, batch_size=args.eval_batch_size, num_samples=1, temperature=0.0, writer=writer, step=global_step)
             
         # Save Checkpoint
         if f1 > best_f1:
@@ -279,11 +280,11 @@ def main():
     logging.info("Running final evaluation of best checkpoint on validation set...")
     checkpoint_path = os.path.join(args.output_dir, f"best_checkpoint.pt")
     trainer.load_checkpoint(checkpoint_path)
-    evaluate_model(model, val_examples, batch_size=args.batch_size, num_samples=1, temperature=0.0, writer=None, step=best_step)
+    evaluate_model(model, val_examples, batch_size=args.eval_batch_size, num_samples=1, temperature=0.0, writer=None, step=best_step)
 
     if args.num_samples > 1:
         logging.info("Running best-of-n voting evaluation on validation set...")
-        evaluate_model(model, val_examples, batch_size=args.batch_size, num_samples=args.num_samples, temperature=args.temperature, writer=None, step=best_step)
+        evaluate_model(model, val_examples, batch_size=args.eval_batch_size, num_samples=args.num_samples, temperature=args.temperature, writer=None, step=best_step)
     
     writer.close()
     

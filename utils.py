@@ -1,6 +1,7 @@
 from itertools import chain, takewhile
 import json
 import logging
+from ordered_set import OrderedSet
 import pathlib
 from tqdm import tqdm
 from typing import List
@@ -93,7 +94,7 @@ def load_data(path: str, ghs_map: dict[str, str], keys_map: dict[str, str], add_
     return examples
 
 
-def best_of_n_vote(preds: List[str]) -> set[str]:
+def best_of_n_vote(preds: List[str]) -> OrderedSet[str]:
     num_samples = len(preds)
     preds = [list(takewhile(lambda x: x != 'STOP', pred.split())) for pred in preds]
     preds = list(chain.from_iterable(preds))
@@ -105,18 +106,18 @@ def best_of_n_vote(preds: List[str]) -> set[str]:
         sorted_codes = [c for c in sorted_codes if c != 'NULL']
         num_pred_codes = min(len(preds)//num_samples, len(sorted_codes))
         sorted_codes = sorted_codes[:num_pred_codes]
-    return set(sorted_codes)
+    return OrderedSet(sorted_codes)
 
 
-def unwrap_output_objs(pred: str) -> set[str]:
+def unwrap_output_objs(pred: str) -> OrderedSet[str]:
     pred = list(takewhile(lambda x: x != 'STOP', pred.split()))
-    return set(pred)
+    return OrderedSet(pred)
     
 
-def compute_instance_metrics(args: tuple[core.Example, set[str]]):
+def compute_instance_metrics(args: tuple[core.Example, OrderedSet[str]]):
     ex, pred = args
     pred_set = pred
-    gold_set = set(ex.y[0].split()[:-1])
+    gold_set = OrderedSet(ex.y[0].split()[:-1])
 
     tp = len(gold_set.intersection(pred_set))
     prec = tp / len(pred_set) if len(pred_set) > 0 else 0.0

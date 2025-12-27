@@ -1,6 +1,6 @@
+from itertools import chain, takewhile
 import json
 import logging
-from ordered_set import OrderedSet
 import pathlib
 from tqdm import tqdm
 from typing import List
@@ -93,29 +93,30 @@ def load_data(path: str, ghs_map: dict[str, str], keys_map: dict[str, str], add_
     return examples
 
 
-def best_of_n_vote(preds: List[str]) -> OrderedSet[str]:
-    pred = " ".join(preds)
-    pred = [c for c in pred.split() if c != 'STOP']
-    unique_codes, counts = np.unique(pred, return_counts=True)
+def best_of_n_vote(preds: List[str]) -> set[str]:
+    num_samples = len(preds)
+    preds = [list(takewhile(lambda x: x != 'STOP', pred.split())) for pred in preds]
+    preds = list(chain.from_iterable(preds))
+    unique_codes, counts = np.unique(preds, return_counts=True)
     sorted_codes = [c for c, _ in sorted(zip(unique_codes, counts), key=lambda x: x[1], reverse=True)]
     if sorted_codes[0] == 'NULL':
         sorted_codes = ['NULL']
     else:
-        if 'NULL' in sorted_codes:
-            sorted_codes.remove('NULL')
-        num_pred_codes = min(len(pred)//num_samples, len(sorted_codes))
+        sorted_codes = [c for c in sorted_codes if c != 'NULL']
+        num_pred_codes = min(len(preds)//num_samples, len(sorted_codes))
         sorted_codes = sorted_codes[:num_pred_codes]
-    return OrderedSet(sorted_codes)
+    return set(sorted_codes)
 
 
-def unwrap_output_objs(pred: str) -> List[str]:
-    return OrderedSet([c for c in pred.split() if c != 'STOP'])
+def unwrap_output_objs(pred: str) -> set[str]:
+    pred = list(takewhile(lambda x: x != 'STOP', pred.split()))
+    return set(pred)
     
 
-def compute_instance_metrics(args: tuple[core.Example, OrderedSet[str]]):
+def compute_instance_metrics(args: tuple[core.Example, set[str]]):
     ex, pred = args
     pred_set = pred
-    gold_set = OrderedSet(ex.y[0].split()[:-1])
+    gold_set = set(ex.y[0].split()[:-1])
 
     tp = len(gold_set.intersection(pred_set))
     prec = tp / len(pred_set) if len(pred_set) > 0 else 0.0

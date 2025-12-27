@@ -1,6 +1,7 @@
 from itertools import chain, takewhile
 import json
 import logging
+import re
 from ordered_set import OrderedSet
 import pathlib
 from tqdm import tqdm
@@ -12,6 +13,17 @@ import torch
 from regress_lm import core
 from regress_lm.pytorch import data_utils
 from regress_lm.pytorch import model as model_lib
+
+
+def clean_dosages(dosages: List[str]) -> str:
+    cleaned = set()
+    for d in dosages:
+        if not isinstance(d, str):
+            continue
+        # Extract codes like 1, 1A, 2C etc.
+        matches = re.findall(r'\b\d+[A-Z]*\b', d)
+        cleaned.update(matches)
+    return "Category " + " ".join(sorted(list(cleaned)))
 
 
 def preprocess_ghs_example(item, ghs_map, keys_map, add_dosage: bool = False, add_auxiliary_features: bool = False):
@@ -42,6 +54,7 @@ def preprocess_ghs_example(item, ghs_map, keys_map, add_dosage: bool = False, ad
                 dosages.append(info.get('category', 'Unknown'))
             else:
                 dosages.append('Unknown')
+        dosages = clean_dosages(dosages)
         x_obj['Dosage'] = dosages
     
     # Add remaining keys

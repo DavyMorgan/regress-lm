@@ -86,7 +86,7 @@ def main():
     parser.add_argument('--max_input_len', type=int, default=512, help='Max input length')
     parser.add_argument('--max_num_hazard_codes', type=int, default=30, help='Max number of hazard codes per example')
     parser.add_argument('--train_batch_size', type=int, default=128, help='Batch size for training')
-    parser.add_argument('--eval_batch_size', type=int, default=512, help='Batch size for evaluation')
+    parser.add_argument('--eval_batch_size', type=int, default=2048, help='Batch size for evaluation')
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--warmup_steps', type=int, default=1000, help='Number of warmup steps')

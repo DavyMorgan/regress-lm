@@ -25,14 +25,14 @@ def main():
     parser.add_argument('--vocab_path', type=str, required=True, help='Path to sentencepiece model')
     
     # Model Config Args (Must match training)
-    parser.add_argument('--max_input_len', type=int, default=4096, help='Max input length')
+    parser.add_argument('--max_input_len', type=int, default=512, help='Max input length')
     parser.add_argument('--max_num_hazard_codes', type=int, default=30, help='Max number of hazard codes')
     parser.add_argument('--encoder_type', type=str, default='vanilla', choices=['vanilla', 't5gemma'], help='Encoder type')
     parser.add_argument('--d_model', type=int, default=512, help='Model dimension')
     parser.add_argument('--num_encoder_layers', type=int, default=6, help='Number of encoder layers')
     parser.add_argument('--num_decoder_layers', type=int, default=6, help='Number of decoder layers')
     
-    parser.add_argument('--eval_batch_size', type=int, default=128, help='Batch size')
+    parser.add_argument('--eval_batch_size', type=int, default=2048, help='Batch size for evaluation')
     parser.add_argument('--gpu', action='store_true', help='Use GPU')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--num_samples', type=int, default=1, help='Number of generated responses per example')

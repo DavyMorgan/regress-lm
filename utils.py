@@ -123,7 +123,7 @@ def compute_instance_metrics(args: tuple[core.Example, OrderedSet[str]]):
     return prec, rec
 
 
-def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=16, num_samples=1, temperature=0.0, writer=None, step: int = 0):
+def evaluate_model(model: model_lib.PyTorchModel, examples: List[core.Example], batch_size=2048, num_samples=1, temperature=0.0, writer=None, step: int = 0):
     model.eval()
     logging.info(f"Evaluating at step {step}...")
     
